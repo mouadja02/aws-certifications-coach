@@ -22,6 +22,5 @@ toolbarMode = "minimal"
 
 [runner]
 magicEnabled = true
-installTracer = false
 fixMatplotlib = true
 
