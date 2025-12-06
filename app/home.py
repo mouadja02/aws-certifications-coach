@@ -292,7 +292,8 @@ def main():
         current_time = time.time()
         last_activity = st.session_state.last_activity
         
-        if current_time - last_activity > st.session_state.session_timeout:
+        # Check if last_activity is not None before comparing
+        if last_activity is not None and current_time - last_activity > st.session_state.session_timeout:
             logger.info("Session timeout - logging out user")
             st.session_state.authenticated = False
             st.session_state.page = "home"
