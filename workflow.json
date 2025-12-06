@@ -1,0 +1,2498 @@
+{
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 10 * * *"
+              }
+            ]
+          }
+        },
+        "id": "9a3eae30-9f2e-4003-8b61-937714b52bfc",
+        "name": "Daily Learning Trigger",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          592,
+          -80
+        ],
+        "webhookId": "daily-learning"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT \n    COALESCE(MAX(day_number), 0) + 1 as current_day,\n    COUNT(*) as total_completed,\n    ROUND(AVG(CASE WHEN is_correct THEN 1 ELSE 0 END) * 100, 2) as accuracy\nFROM progress p\nLEFT JOIN user_answers ua ON p.id = ua.progress_id",
+          "options": {}
+        },
+        "id": "7755e540-c48d-42dc-9796-5e75bd36f0e0",
+        "name": "Get Current Progress",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          816,
+          -80
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "day-number",
+                "name": "dayNumber",
+                "value": "={{ $json.current_day }}",
+                "type": "number"
+              },
+              {
+                "id": "service-list",
+                "name": "awsServices",
+                "value": "=[\n  \"EC2\", \"VPC\", \"S3\", \"EBS\", \"EFS\", \"IAM\", \"CloudWatch\",\n  \"Lambda\", \"ECS\", \"EKS\", \"Fargate\", \"Elastic Beanstalk\",\n  \"RDS\", \"Aurora\", \"DynamoDB\", \"ElastiCache\", \"Redshift\",\n  \"Route 53\", \"CloudFront\", \"API Gateway\", \"ALB\", \"NLB\",\n  \"KMS\", \"Secrets Manager\", \"WAF\", \"GuardDuty\", \"Config\",\n  \"CloudFormation\", \"Systems Manager\", \"Step Functions\",\n  \"SQS\", \"SNS\", \"EventBridge\", \"Kinesis\", \"Glue\",\n  \"Athena\", \"EMR\", \"SageMaker\", \"Cognito\", \"CloudTrail\",\n  \"Organizations\", \"Control Tower\", \"Service Catalog\",\n  \"Backup\", \"FSx\", \"DataSync\", \"Snow Family\", \"Direct Connect\",\n  \"Transit Gateway\", \"VPN\", \"PrivateLink\", \"AWS Batch\",\n  \"App Runner\", \"Lightsail\", \"Outposts\", \"Local Zones\",\n  \"Wavelength\", \"SAM\", \"CDK\", \"CodeDeploy\", \"CodePipeline\",\n  \"X-Ray\", \"CloudWatch Logs\", \"CloudWatch Metrics\", \"Auto Scaling\",\n  \"Elastic File System\", \"Storage Gateway\"\n]",
+                "type": "array"
+              },
+              {
+                "id": "current-service",
+                "name": "currentService",
+                "value": "={{ $json.awsServices[($json.current_day - 1) % $json.awsServices.length] }}",
+                "type": "string"
+              },
+              {
+                "id": "d4d2b17c-c0cc-48b2-9706-f3a242b9f1de",
+                "name": "chat_id",
+                "value": "1766877995",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "98092259-ee5f-4f0e-a36b-576de83177f7",
+        "name": "Calculate Day & Service",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          1040,
+          -80
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- AWS SAA-C03 Certification Study Database Schema\n\n-- Drop existing tables if they exist\nDROP TABLE IF EXISTS user_answers CASCADE;\nDROP TABLE IF EXISTS questions CASCADE;\nDROP TABLE IF EXISTS progress CASCADE;\n\n-- Progress tracking table\nCREATE TABLE progress (\n    id SERIAL PRIMARY KEY,\n    date DATE NOT NULL DEFAULT CURRENT_DATE,\n    day_number INTEGER NOT NULL,\n    service VARCHAR(100) NOT NULL,\n    completed BOOLEAN DEFAULT FALSE,\n    content TEXT,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Questions bank table\nCREATE TABLE questions (\n    id SERIAL PRIMARY KEY,\n    question_text TEXT NOT NULL,\n    option_a TEXT NOT NULL,\n    option_b TEXT NOT NULL,\n    option_c TEXT NOT NULL,\n    option_d TEXT NOT NULL,\n    correct_answer CHAR(1) NOT NULL CHECK (correct_answer IN ('A', 'B', 'C', 'D')),\n    explanation TEXT,\n    service VARCHAR(100),\n    difficulty VARCHAR(20) CHECK (difficulty IN ('easy', 'medium', 'hard')),\n    category VARCHAR(100),\n    tags TEXT[],\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\n-- User answers tracking table\nCREATE TABLE user_answers (\n    id SERIAL PRIMARY KEY,\n    question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,\n    progress_id INTEGER REFERENCES progress(id) ON DELETE SET NULL,\n    user_answer CHAR(1) CHECK (user_answer IN ('A', 'B', 'C', 'D')),\n    is_correct BOOLEAN NOT NULL,\n    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    response_time INTEGER -- in seconds\n);\n\n-- Create indexes for better performance\nCREATE INDEX idx_progress_date ON progress(date);\nCREATE INDEX idx_progress_day_number ON progress(day_number);\nCREATE INDEX idx_progress_service ON progress(service);\nCREATE INDEX idx_questions_service ON questions(service);\nCREATE INDEX idx_questions_difficulty ON questions(difficulty);\nCREATE INDEX idx_user_answers_timestamp ON user_answers(timestamp);\nCREATE INDEX idx_user_answers_is_correct ON user_answers(is_correct);\n\n-- Create a view for progress statistics\nCREATE OR REPLACE VIEW progress_stats AS\nSELECT \n    MAX(p.day_number) as current_day,\n    COUNT(DISTINCT p.date) as study_days,\n    COUNT(ua.id) as total_questions_answered,\n    SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) as correct_answers,\n    ROUND(AVG(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) * 100, 2) as accuracy_percentage,\n    COUNT(DISTINCT p.service) as services_studied\nFROM progress p\nLEFT JOIN user_answers ua ON p.id = ua.progress_id;\n\n-- Create a view for weak areas\nCREATE OR REPLACE VIEW weak_areas AS\nSELECT \n    q.service,\n    COUNT(*) as total_questions,\n    SUM(CASE WHEN ua.is_correct THEN 0 ELSE 1 END) as incorrect_count,\n    ROUND(AVG(CASE WHEN ua.is_correct THEN 0 ELSE 1 END) * 100, 2) as error_rate\nFROM user_answers ua\nJOIN questions q ON ua.question_id = q.id\nGROUP BY q.service\nHAVING COUNT(*) >= 3\nORDER BY error_rate DESC;\n\n-- Insert some sample questions for testing\nINSERT INTO questions (question_text, option_a, option_b, option_c, option_d, correct_answer, explanation, service, difficulty, category) VALUES\n(\n    'A company needs to store frequently accessed data with millisecond latency. The data must be highly available across multiple Availability Zones. Which storage solution should be used?',\n    'Amazon S3 Standard',\n    'Amazon ElastiCache',\n    'Amazon EBS with Multi-Attach',\n    'Amazon S3 Glacier',\n    'B',\n    'ElastiCache provides sub-millisecond latency for frequently accessed data and supports Multi-AZ deployments. S3 has higher latency, EBS Multi-Attach is limited to specific instance types, and Glacier is for archival storage.',\n    'ElastiCache',\n    'medium',\n    'Storage & Caching'\n),\n(\n    'An application running on EC2 instances needs to access S3 buckets without using long-term credentials. What is the MOST secure way to grant this access?',\n    'Store AWS credentials in the application code',\n    'Create an IAM role and attach it to the EC2 instances',\n    'Use AWS access keys stored in environment variables',\n    'Create a bucket policy allowing public access',\n    'B',\n    'IAM roles provide temporary credentials that are automatically rotated, eliminating the need to manage long-term credentials. This is the most secure approach for EC2 instances accessing AWS services.',\n    'IAM',\n    'easy',\n    'Security & Identity'\n),\n(\n    'A startup needs to deploy a web application that can scale automatically based on traffic. They want minimal operational overhead and pay only for actual usage. Which solution is MOST appropriate?',\n    'EC2 instances with Auto Scaling and Application Load Balancer',\n    'AWS Lambda with API Gateway',\n    'Elastic Beanstalk with Auto Scaling',\n    'ECS Fargate with Application Load Balancer',\n    'B',\n    'Lambda with API Gateway provides serverless architecture with automatic scaling, zero operational overhead, and true pay-per-use pricing. Other options require more management or may have idle capacity costs.',\n    'Lambda',\n    'medium',\n    'Compute'\n),\n(\n    'A company wants to implement disaster recovery for their RDS database with an RTO of 5 minutes and RPO of 1 hour. Which solution meets these requirements MOST cost-effectively?',\n    'Multi-AZ deployment with automated backups',\n    'Read replicas in another region with manual promotion',\n    'Automated snapshots every hour',\n    'Database migration to DynamoDB global tables',\n    'A',\n    'Multi-AZ provides automatic failover in minutes (meeting RTO) and synchronous replication (meeting RPO). Read replicas require manual promotion (slower), snapshots may exceed RTO, and DynamoDB migration is unnecessary and expensive.',\n    'RDS',\n    'hard',\n    'Database'\n),\n(\n    'An application generates large log files that need to be analyzed occasionally. The logs must be retained for 7 years for compliance. What is the MOST cost-effective storage solution?',\n    'S3 Standard with lifecycle policy to Glacier Deep Archive after 90 days',\n    'EBS volumes with snapshots',\n    'S3 Glacier Instant Retrieval',\n    'EFS with Lifecycle Management',\n    'A',\n    'S3 Standard for active logs transitioning to Glacier Deep Archive provides the most cost-effective long-term storage for rarely accessed data. Glacier Deep Archive has the lowest storage cost for 7-year retention.',\n    'S3',\n    'medium',\n    'Storage & Archival'\n);\n\n-- Function to get next question for a user (avoiding recent questions)\nCREATE OR REPLACE FUNCTION get_next_question()\nRETURNS TABLE (\n    id INTEGER,\n    question_text TEXT,\n    option_a TEXT,\n    option_b TEXT,\n    option_c TEXT,\n    option_d TEXT,\n    service VARCHAR(100),\n    difficulty VARCHAR(20)\n) AS $$\nBEGIN\n    RETURN QUERY\n    SELECT q.id, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.service, q.difficulty\n    FROM questions q\n    WHERE q.id NOT IN (\n        SELECT question_id \n        FROM user_answers \n        WHERE timestamp > NOW() - INTERVAL '1 day'\n    )\n    ORDER BY RANDOM()\n    LIMIT 1;\nEND;\n$$ LANGUAGE plpgsql;\n\n-- Function to calculate streak\nCREATE OR REPLACE FUNCTION get_study_streak()\nRETURNS INTEGER AS $$\nDECLARE\n    streak INTEGER := 0;\n    check_date DATE := CURRENT_DATE;\nBEGIN\n    LOOP\n        IF EXISTS (SELECT 1 FROM progress WHERE date = check_date) THEN\n            streak := streak + 1;\n            check_date := check_date - INTERVAL '1 day';\n        ELSE\n            EXIT;\n        END IF;\n    END LOOP;\n    RETURN streak;\nEND;\n$$ LANGUAGE plpgsql;\n\n-- Insert initial progress entry\nINSERT INTO progress (date, day_number, service, completed) \nVALUES (CURRENT_DATE, 1, 'Getting Started', FALSE)\nON CONFLICT DO NOTHING;\n\n-- Grant permissions (adjust as needed)\n-- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO n8n;\n-- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO n8n;\n-- GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO n8n;\n\nCOMMENT ON TABLE progress IS 'Tracks daily study progress and completed services';\nCOMMENT ON TABLE questions IS 'Question bank for AWS SAA-C03 certification practice';\nCOMMENT ON TABLE user_answers IS 'Records user responses and performance metrics';\nCOMMENT ON VIEW progress_stats IS 'Aggregated statistics about study progress';\nCOMMENT ON VIEW weak_areas IS 'Identifies services where user needs more practice';",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1120,
+          -400
+        ],
+        "id": "a6323093-a087-4ca7-9ee7-fb96d8a2dcca",
+        "name": "Execute a SQL query",
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          800,
+          -400
+        ],
+        "id": "a8ab8600-df01-4a69-916c-6950425bdaee",
+        "name": "When clicking ‘Execute workflow’"
+      },
+      {
+        "parameters": {
+          "content": "## Run SQL query",
+          "height": 80,
+          "width": 192
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          560,
+          -384
+        ],
+        "typeVersion": 1,
+        "id": "9bd45f61-194a-4fe1-94ac-8c23606f8703",
+        "name": "Sticky Note"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "=Format your response EXACTLY as follows:\n\n📘 **SERVICE: {{$json.currentService}}**\n🎯 **Day {{$json.dayNumber}}/65**\n\n---\n\n## 🔑 KEY CONCEPTS\n\n1. **[Concept Name]**: [Detailed explanation with real-world context and when to use it]\n\n2. **[Concept Name]**: [Detailed explanation with real-world context and when to use it]\n\n3. **[Concept Name]**: [Detailed explanation with real-world context and when to use it]\n\n4. **[Concept Name]**: [Detailed explanation with real-world context and when to use it]\n\n5. **[Concept Name]**: [Detailed explanation with real-world context and when to use it]\n\n---\n\n## 💡 EXAM TIPS\n\n✅ **What the exam focuses on:**\n- [Specific exam scenario or pattern]\n- [Common question type]\n- [Key decision criteria]\n\n❌ **Common misconceptions:**\n- [Misconception and the truth]\n- [Wrong assumption students make]\n\n🔄 **When to choose ${$json.currentService} vs alternatives:**\n- [Comparison with similar services]\n- [Decision tree or criteria]\n\n---\n\n## ❓ SCENARIO QUESTION\n\n**Situation:**\n[Describe a realistic business/technical scenario that requires architectural decision]\n\n**Question:**\n[What is the MOST appropriate solution?]\n\n**A)** [Plausible but suboptimal option]\n\n**B)** [Correct answer with proper justification]\n\n**C)** [Common trap answer that seems right but isn't]\n\n**D)** [Another reasonable but incorrect option]\n\n**Correct Answer: B**\n\n---\n\n## 🚨 TRAP ALERT\n\n**Common trap in exam:**\n[Describe the trap pattern specific to this service]\n\n**Why students fall for it:**\n[Psychological or logical reason]\n\n**How to avoid:**\n[Strategy or checklist to identify correct answer]\n\n---\n\n**Reply with your answer (A/B/C/D) to get a detailed explanation and your next question!**",
+          "options": {
+            "systemMessage": "=You are an AWS Solutions Architect Associate (SAA-C03) exam expert and coach.\n\nGenerate comprehensive study material for **{{$json.currentService}}** - Day {{$json.dayNumber}}/65. Limit the response length to 4000 characters."
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3,
+        "position": [
+          1264,
+          -80
+        ],
+        "id": "ab6824ab-fa8b-4c44-b98d-0153a2690aa4",
+        "name": "AI Agent"
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "value": "gpt-5-mini",
+            "mode": "list",
+            "cachedResultName": "gpt-5-mini"
+          },
+          "builtInTools": {
+            "webSearch": {
+              "searchContextSize": "medium"
+            }
+          },
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          1168,
+          160
+        ],
+        "id": "81bb0142-792c-4bbf-b471-f79478c84ede",
+        "name": "OpenAI Chat Model",
+        "credentials": {
+          "openAiApi": {
+            "id": "339UEiwnjfCpq9Df",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "value": "public",
+            "mode": "list",
+            "cachedResultName": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "progress",
+            "mode": "list",
+            "cachedResultName": "progress"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "completed": false,
+              "id": "=",
+              "day_number": "={{ $('Calculate Day & Service').item.json.dayNumber }}",
+              "date": "={{ $now.format('yyyy-MM-dd') }}",
+              "service": "{{ $('Calculate Day & Service').item.json.currentService }}",
+              "content": "{{ $json.message.content }}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "date",
+                "displayName": "date",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "day_number",
+                "displayName": "day_number",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "service",
+                "displayName": "service",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "completed",
+                "displayName": "completed",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "content",
+                "displayName": "content",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "created_at",
+                "displayName": "created_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "updated_at",
+                "displayName": "updated_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1616,
+          -80
+        ],
+        "id": "1f47c957-f3d8-45d8-bfa0-ebd0c1e2458d",
+        "name": "Insert rows in a table",
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "chatId": "1766877995",
+          "text": "={{ $json.text.slice(0, 4000) }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "Markdown"
+          }
+        },
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2192,
+          -80
+        ],
+        "id": "867f51be-5f4d-44b7-89dd-082a8b82e92a",
+        "name": "Send a text message",
+        "webhookId": "d0d684bf-1c2a-4aef-9505-282de78b7075",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $('AI Agent').item.json.output }}",
+          "messages": {
+            "messageValues": [
+              {
+                "message": "Format this text to be sent in telegram, if exceeding 4000 characters summarize it and format it always in plain simple text and use text format compatible with telegram markdown"
+              }
+            ]
+          },
+          "batching": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.chainLlm",
+        "typeVersion": 1.7,
+        "position": [
+          1840,
+          -80
+        ],
+        "id": "b2128bb2-a447-44d7-ba4a-bae7a23c0e5b",
+        "name": "Basic LLM Chain"
+      },
+      {
+        "parameters": {
+          "model": "openai/gpt-oss-120b",
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+        "typeVersion": 1,
+        "position": [
+          1920,
+          160
+        ],
+        "id": "5040164f-b906-42f3-bdca-aa13c6a17dc1",
+        "name": "Groq Chat Model",
+        "credentials": {
+          "groqApi": {
+            "id": "FzrfmAlY2Si2Zl2g",
+            "name": "Groq account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "b1c78493-5c22-4537-bebe-16f2a8de1247",
+                "leftValue": "={{ $('Telegram Trigger').item.json.message.text }",
+                "rightValue": "/",
+                "operator": {
+                  "type": "string",
+                  "operation": "startsWith"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1200,
+          624
+        ],
+        "id": "69a14ce6-426d-4bb8-bd64-38add1e3290d",
+        "name": "If"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $('Telegram Trigger').item.json.message.text }} ",
+                      "rightValue": "/info",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      },
+                      "id": "e0010f23-11c8-449a-8860-f2f8c693612e"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "b7bc052b-ee97-4875-a2e7-dd209cc805e9",
+                      "leftValue": "={{ $('Telegram Trigger').item.json.message.text }}",
+                      "rightValue": "/quiz",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "0c0ee260-e092-4072-87c2-044e8b12ca61",
+                      "leftValue": "",
+                      "rightValue": "",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.3,
+        "position": [
+          1504,
+          592
+        ],
+        "id": "dc6976a6-b717-4ea8-85ea-cba4d69e5f32",
+        "name": "Switch"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "aws-study",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "1e8c9eda-a0d0-4c93-9e11-83a4c3b6109a",
+        "name": "Message Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1.1,
+        "position": [
+          1424,
+          3328
+        ],
+        "webhookId": "aws-study-webhook",
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "value": "public",
+            "mode": "list"
+          },
+          "table": {
+            "__rl": true,
+            "value": "progress",
+            "mode": "list"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "date": "={{ $now.format('yyyy-MM-dd') }}",
+              "day_number": "={{ $('Calculate Day & Service1').item.json.dayNumber }}",
+              "service": "={{ $('Calculate Day & Service1').item.json.currentService }}",
+              "completed": false,
+              "content": "={{ $json.choices[0].message.content }}"
+            }
+          },
+          "options": {}
+        },
+        "id": "31c3fe40-1516-4c4a-854f-462b20c0d946",
+        "name": "Store Daily Progress",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          2352,
+          2784
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+          "text": "={{ $('Generate Daily Content (OpenAI)').item.json.choices[0].message.content }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "7fa9a2ff-f56a-4701-9759-4e0e01036fa4",
+        "name": "Send to Telegram",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2576,
+          2800
+        ],
+        "webhookId": "b47f8d86-81ae-46b0-bb87-2b660f15443b",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": ""
+            },
+            "conditions": [
+              {
+                "id": "is-command",
+                "leftValue": "={{ $json.body.message.text }}",
+                "rightValue": "/",
+                "operator": {
+                  "type": "string",
+                  "operation": "startsWith"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "04d26090-1138-44db-8aac-deb5832ad4e3",
+        "name": "Is Command?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1648,
+          3328
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.message.text }}",
+                      "rightValue": "/info",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "info"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.message.text }}",
+                      "rightValue": "/quiz",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "quiz"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.message.text }}",
+                      "rightValue": "/progress",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "progress"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.message.text }}",
+                      "rightValue": "/scenario",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "scenario"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.message.text }}",
+                      "rightValue": "/tips",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "tips"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.message.text }}",
+                      "rightValue": "/cheatsheet",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "cheatsheet"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.message.text }}",
+                      "rightValue": "/review",
+                      "operator": {
+                        "type": "string",
+                        "operation": "startsWith"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "review"
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra",
+            "allMatchingOutputs": false
+          }
+        },
+        "id": "38a529cd-1f1f-4267-a640-ef4e21294ba6",
+        "name": "Command Router",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3,
+        "position": [
+          1872,
+          3216
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "model": "gpt-4o",
+          "options": {
+            "maxTokens": 1500,
+            "temperature": 0.7
+          }
+        },
+        "id": "233b00cc-cfad-465e-90c0-6fd680c8b7a7",
+        "name": "Generate Info Response",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          2288,
+          560
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "339UEiwnjfCpq9Df",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Telegram Trigger').item.json.message.from.id }}",
+          "text": "={{ $json.output }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "227cfe46-e306-4f4e-96a8-f0a7d8921657",
+        "name": "Send Info Response",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2768,
+          352
+        ],
+        "webhookId": "c05b18c2-ad83-470a-9ffc-efef3ce70265",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "quiz-topic",
+                "name": "quizTopic",
+                "value": "={{ $json.body.message.text.split(' ')[1] || 'random' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "d7cab82b-8e86-49ed-9ef7-11e96aea807d",
+        "name": "Extract Quiz Topic",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          1936,
+          720
+        ]
+      },
+      {
+        "parameters": {
+          "model": "gpt-4o",
+          "options": {
+            "maxTokens": 2000,
+            "temperature": 0.8
+          }
+        },
+        "id": "3a8c5eb0-5d90-41f0-acc9-4f3c3a0c2a64",
+        "name": "Generate Quiz",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          2304,
+          3248
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "339UEiwnjfCpq9Df",
+            "name": "OpenAi account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "=🎯 **QUIZ TIME!** 🎯\n\nTopic: {{ $('Extract Quiz Topic').item.json.quizTopic }}\n\n{{ $json.choices[0].message.content }}\n\n---\n💬 **Reply with your answers (e.g., \"A,B,C,D,A\") to see your results!**",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "430b8519-1b72-4894-8f16-b0be3133ca9d",
+        "name": "Send Quiz",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2528,
+          3248
+        ],
+        "webhookId": "7ca67ae3-bba4-48eb-b445-ee0de08f68f1",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=SELECT \n  COUNT(*) as total_questions,\n  SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_answers,\n  ROUND(AVG(CASE WHEN is_correct THEN 1 ELSE 0 END) * 100, 2) as accuracy,\n  COUNT(DISTINCT DATE(timestamp)) as study_days,\n  MAX(day_number) as current_day,\n  (SELECT STRING_AGG(DISTINCT service, ', ') \n   FROM (\n     SELECT service, COUNT(*) as cnt\n     FROM user_answers ua\n     JOIN questions q ON ua.question_id = q.id\n     WHERE NOT is_correct\n     GROUP BY service\n     ORDER BY cnt DESC\n     LIMIT 3\n   ) weak_areas) as weak_services\nFROM user_answers ua\nJOIN progress p ON ua.progress_id = p.id",
+          "options": {}
+        },
+        "id": "fef884ff-72d2-4cbb-b93b-8126bc263e8b",
+        "name": "Get Progress Stats",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          2096,
+          3392
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "=📊 **YOUR PROGRESS REPORT** 📊\n\n🎯 **Study Progress**\n├─ Current Day: {{ $json[0].current_day }}/65\n├─ Study Days: {{ $json[0].study_days }} days\n└─ Progress: {{ Math.round(($json[0].current_day / 65) * 100) }}%\n\n✅ **Performance Stats**\n├─ Total Questions: {{ $json[0].total_questions }}\n├─ Correct Answers: {{ $json[0].correct_answers }}\n└─ Accuracy: {{ $json[0].accuracy }}%\n\n{{ $json[0].accuracy >= 80 ? '🔥 **Excellent!** You\\'re exam-ready!' : $json[0].accuracy >= 70 ? '💪 **Good progress!** Keep practicing!' : '📚 **Keep studying!** Focus on weak areas.' }}\n\n⚠️ **Weak Areas**\n{{ $json[0].weak_services || 'No weak areas identified yet!' }}\n\n---\n💡 Use `/info [service]` to review weak topics\n💡 Use `/quiz [topic]` for targeted practice",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "4b758e9d-03ef-454f-b746-e07b32c03337",
+        "name": "Send Progress",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2304,
+          3392
+        ],
+        "webhookId": "33207ec9-b3e0-4c7c-b341-11df7ce0a3fb",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "model": "gpt-4o",
+          "options": {
+            "maxTokens": 2000,
+            "temperature": 0.9
+          }
+        },
+        "id": "1096cdd6-c815-4ce5-b412-1a4fe8bf5d27",
+        "name": "Generate Scenario",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          2096,
+          3536
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "339UEiwnjfCpq9Df",
+            "name": "OpenAi account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "={{ $json.choices[0].message.content }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "a2d83a4e-779a-4ec2-9696-9c684fc079a0",
+        "name": "Send Scenario",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2304,
+          3536
+        ],
+        "webhookId": "394f256a-f080-49b5-9ecd-50cc0e111828",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "model": "gpt-4o",
+          "options": {
+            "maxTokens": 1800,
+            "temperature": 0.7
+          }
+        },
+        "id": "748fff8c-1fc2-4466-8f5e-38c7abf7a573",
+        "name": "Generate Tips",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          2096,
+          3664
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "339UEiwnjfCpq9Df",
+            "name": "OpenAi account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "={{ $json.choices[0].message.content }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "92ae9ef6-b371-490b-bcea-c30b723491bc",
+        "name": "Send Tips",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2304,
+          3664
+        ],
+        "webhookId": "18d6186a-b0cc-4a23-9ac6-58e024e7f528",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cheatsheet-service",
+                "name": "serviceForCheatsheet",
+                "value": "={{ $json.body.message.text.split(' ')[1] || 'EC2' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "6f2d95b6-95d5-40c0-a718-2c52df058f0c",
+        "name": "Extract Cheatsheet Service",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          2096,
+          3808
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "model": "gpt-4o",
+          "options": {
+            "maxTokens": 2000,
+            "temperature": 0.5
+          }
+        },
+        "id": "d55fef2b-7fca-4ce3-8949-e79372b44491",
+        "name": "Generate Cheatsheet",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          2304,
+          3808
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "339UEiwnjfCpq9Df",
+            "name": "OpenAi account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "={{ $json.choices[0].message.content }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "8f976753-e72d-47ee-af7f-e5905dfee73d",
+        "name": "Send Cheatsheet",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2528,
+          3808
+        ],
+        "webhookId": "70a60577-04ba-4975-8276-f8e20f2ecd78",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, \n       q.correct_answer, q.explanation, ua.user_answer\nFROM user_answers ua\nJOIN questions q ON ua.question_id = q.id\nWHERE ua.is_correct = false\nORDER BY ua.timestamp DESC\nLIMIT 5",
+          "options": {}
+        },
+        "id": "5f67e78e-9788-4469-aade-b3f24c2508a4",
+        "name": "Get Wrong Answers",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          2096,
+          3952
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "=📚 **REVIEW YOUR MISTAKES** 📚\n\nHere are your last 5 incorrect answers:\n\n{{ $json.map((item, i) => `\n**Question ${i+1}:**\n${item.question_text}\n\nA) ${item.option_a}\nB) ${item.option_b}\nC) ${item.option_c}\nD) ${item.option_d}\n\n❌ Your answer: ${item.user_answer}\n✅ Correct answer: ${item.correct_answer}\n\n💡 **Explanation:**\n${item.explanation}\n\n---\n`).join('\\n') }}\n\n💪 Ready to try similar questions? Use `/quiz` to practice!",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "a1fb793b-a9a8-46f5-b72d-b9da25ff436e",
+        "name": "Send Review",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2304,
+          3952
+        ],
+        "webhookId": "28905584-f3b8-435a-8c30-9c7c446cf83e",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=SELECT id, question_text, option_a, option_b, option_c, option_d, correct_answer\nFROM questions\nWHERE id NOT IN (\n  SELECT question_id \n  FROM user_answers \n  WHERE timestamp > NOW() - INTERVAL '1 day'\n)\nORDER BY RANDOM()\nLIMIT 1",
+          "options": {}
+        },
+        "id": "1a8a9507-1238-47f7-9cab-fe4136e3bd74",
+        "name": "Get Next Question",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          1872,
+          3472
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "user-answer",
+                "name": "userAnswer",
+                "value": "={{ $json.body.message.text.toUpperCase().trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "is-answer",
+                "name": "isValidAnswer",
+                "value": "={{ ['A', 'B', 'C', 'D'].includes($json.userAnswer) }}",
+                "type": "boolean"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "f623fd3c-a844-45d3-bcf2-9b6015698b43",
+        "name": "Parse Answer",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          1648,
+          3472
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": ""
+            },
+            "conditions": [
+              {
+                "id": "valid-answer-check",
+                "leftValue": "={{ $json.isValidAnswer }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "d825d35a-a542-4bd3-82b8-17d0cdf6b17b",
+        "name": "Is Valid Answer?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1872,
+          3568
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=SELECT * FROM questions \nWHERE id = (SELECT MAX(id) FROM questions)",
+          "options": {}
+        },
+        "id": "379a71b5-5fe0-4f45-9dbf-91e5f890b321",
+        "name": "Get Current Question",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          2096,
+          3568
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "check-correct",
+                "name": "isCorrect",
+                "value": "={{ $('Parse Answer').item.json.userAnswer === $json[0].correct_answer }}",
+                "type": "boolean"
+              },
+              {
+                "id": "correct-answer",
+                "name": "correctAnswer",
+                "value": "={{ $json[0].correct_answer }}",
+                "type": "string"
+              },
+              {
+                "id": "explanation",
+                "name": "explanation",
+                "value": "={{ $json[0].explanation }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "4ce45646-638c-42af-a49e-f71fdb9253e3",
+        "name": "Validate Answer",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          2304,
+          3568
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "value": "public",
+            "mode": "list"
+          },
+          "table": {
+            "__rl": true,
+            "value": "user_answers",
+            "mode": "list"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "question_id": "={{ $('Get Current Question').item.json[0].id }}",
+              "user_answer": "={{ $('Parse Answer').item.json.userAnswer }}",
+              "is_correct": "={{ $json.isCorrect }}",
+              "timestamp": "={{ $now.toISO() }}"
+            }
+          },
+          "options": {}
+        },
+        "id": "07988d66-dc5b-4f7d-9f7e-463fe1b301dc",
+        "name": "Store Answer",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          2528,
+          3568
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "={{ $('Validate Answer').item.json.isCorrect ? '✅ **CORRECT!** Well done!' : '❌ **INCORRECT**' }}\n\n**Correct Answer:** {{ $('Validate Answer').item.json.correctAnswer }}\n\n**Explanation:**\n{{ $('Validate Answer').item.json.explanation }}\n\n---\n\n📊 Next question coming up...",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "905717b0-2298-4028-bb54-6521779f8dbc",
+        "name": "Send Answer Feedback",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2752,
+          3568
+        ],
+        "webhookId": "c11be4fd-74b8-433e-8a19-0abe259f1d68",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Message Webhook').item.json.body.message.chat.id }}",
+          "text": "=❓ **NEW QUESTION** ❓\n\n{{ $json[0].question_text }}\n\nA) {{ $json[0].option_a }}\nB) {{ $json[0].option_b }}\nC) {{ $json[0].option_c }}\nD) {{ $json[0].option_d }}\n\n---\n💬 Reply with A, B, C, or D",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "2de7611c-6035-468b-8037-20721af0872d",
+        "name": "Send Next Question",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          2096,
+          3472
+        ],
+        "webhookId": "21a2b339-f6a9-4c75-85d7-715ce4081446",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "=OK",
+          "options": {}
+        },
+        "id": "fa112d4c-5a49-491a-9316-2895bcb7234d",
+        "name": "Webhook Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          2976,
+          3328
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 8 * * *"
+              }
+            ]
+          }
+        },
+        "id": "8d76d753-d61f-464a-a02b-089b6ff24f5a",
+        "name": "Daily Learning Trigger1",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          1424,
+          3024
+        ],
+        "webhookId": "daily-learning",
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT COALESCE(MAX(day_number), 0) + 1 as current_day, \n       COUNT(*) as total_completed,\n       ROUND(AVG(CASE WHEN is_correct THEN 1 ELSE 0 END) * 100, 2) as accuracy\nFROM progress p\nLEFT JOIN user_answers ua ON p.id = ua.progress_id",
+          "options": {}
+        },
+        "id": "97213939-20f1-4ab7-96b8-2a2e0ba83ba7",
+        "name": "Get Current Progress1",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.4,
+        "position": [
+          1648,
+          3024
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "day-number",
+                "name": "dayNumber",
+                "value": "={{ $json.current_day }}",
+                "type": "number"
+              },
+              {
+                "id": "service-list",
+                "name": "awsServices",
+                "value": "=[\n  \"EC2\", \"VPC\", \"S3\", \"EBS\", \"EFS\", \"IAM\", \"CloudWatch\",\n  \"Lambda\", \"ECS\", \"EKS\", \"Fargate\", \"Elastic Beanstalk\",\n  \"RDS\", \"Aurora\", \"DynamoDB\", \"ElastiCache\", \"Redshift\",\n  \"Route 53\", \"CloudFront\", \"API Gateway\", \"ALB\", \"NLB\",\n  \"KMS\", \"Secrets Manager\", \"WAF\", \"GuardDuty\", \"Config\",\n  \"CloudFormation\", \"Systems Manager\", \"Step Functions\",\n  \"SQS\", \"SNS\", \"EventBridge\", \"Kinesis\", \"Glue\",\n  \"Athena\", \"EMR\", \"SageMaker\", \"Cognito\", \"CloudTrail\",\n  \"Organizations\", \"Control Tower\", \"Service Catalog\",\n  \"Backup\", \"FSx\", \"DataSync\", \"Snow Family\", \"Direct Connect\",\n  \"Transit Gateway\", \"VPN\", \"PrivateLink\", \"AWS Batch\",\n  \"App Runner\", \"Lightsail\", \"Outposts\", \"Local Zones\",\n  \"Wavelength\", \"SAM\", \"CDK\", \"CodeDeploy\", \"CodePipeline\",\n  \"X-Ray\", \"CloudWatch Logs\", \"CloudWatch Metrics\", \"Auto Scaling\",\n  \"Elastic File System\", \"Storage Gateway\"\n]",
+                "type": "array"
+              },
+              {
+                "id": "current-service",
+                "name": "currentService",
+                "value": "={{ $json.awsServices[($json.dayNumber - 1) % $json.awsServices.length] }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "b3913db6-c752-4869-b0bc-ec3130baec4f",
+        "name": "Calculate Day & Service1",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          1872,
+          3024
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "extract-service",
+                "name": "requestedService",
+                "value": "={{ $json.result }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "07a974b5-82fd-40d0-8cf4-37206da3afc4",
+        "name": "Extract Service Name",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          2016,
+          352
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const text = $input.first().json.message.text || \"\";\nconst parts = text.split(\" \");\n\nconst awsServices = [\"EC2\", \"S3\", \"Lambda\", \"DynamoDB\", \"RDS\", \"ECS\", \"CloudWatch\"];\n\n// Use second word if present, otherwise random\nconst result = parts[1] || awsServices[Math.floor(Math.random() * awsServices.length)];\n\nreturn { result };\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1792,
+          352
+        ],
+        "id": "467b9ccc-7e37-4de2-8cdf-05b20e160a6d",
+        "name": "Get AWS service"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "=Do your research about AWS {{ $json.requestedService }}\n",
+          "options": {
+            "systemMessage": "=You are an AWS Solutions Architect Associate (SAA-C03) exam expert and coach. Based on your search results about AWS {{ $json.requestedService }}\n\nProvide a comprehensive /info response with:\n\n📚 {{ $json.requestedService }} - Deep Dive\n\n🎯 What It Is\n[2-3 sentence overview]\n\n🔧 Key Features for Exam\n- [Feature 1 with exam context]\n- [Feature 2 with exam context]\n- [Feature 3 with exam context]\n- [Feature 4 with exam context]\n\n💼 Real-World Use Cases\n1. [Use case with architecture pattern]\n2. [Use case with architecture pattern]\n3. [Use case with architecture pattern]\n\n⚡ Exam Focus Areas\n- [What questions typically test]\n- [Common scenario patterns]\n- [Integration points with other services]\n\n🔗 Works Best With\n[List complementary services and why]\n\n❌ Common Mistakes\n1. [Mistake and correction]\n2. [Mistake and correction]\n\n\n📊 Quick Comparison\n[Compare with 2-3 similar services, when to choose each]\n\n---\n💡 **Pro Tip:** [One powerful insight for the exam]\n\n\nLimit the answer in 4000 characters"
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3,
+        "position": [
+          2320,
+          352
+        ],
+        "id": "d91cb630-45fe-42e8-8b46-790b58d7db21",
+        "name": "AI Agent1"
+      },
+      {
+        "parameters": {
+          "descriptionType": "manual",
+          "toolDescription": "Use this tool to search on the web",
+          "query": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Query', ``, 'string') }}",
+          "options": {
+            "search_depth": "advanced"
+          }
+        },
+        "type": "@tavily/n8n-nodes-tavily.tavilyTool",
+        "typeVersion": 1,
+        "position": [
+          2496,
+          560
+        ],
+        "id": "fc23bcc0-c7cd-49f1-89e5-4e59251dad0d",
+        "name": "Search in Tavily",
+        "credentials": {
+          "tavilyApi": {
+            "id": "CayxvRd2EdhIxOSQ",
+            "name": "Tavily account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "=Generate 5 AWS SAA-C03 exam-style questions about {{ $json.quizTopic === 'random' ? 'various AWS services' : $json.quizTopic }}.\n",
+          "options": {
+            "systemMessage": "=You are an AWS Solutions Architect Associate (SAA-C03) exam expert and coach.\n\nFormat each question as:\n\n**Q[number]/5: [Scenario description]**\n\n**Question:** [What is the best solution?]\n\nA) [Option]\nB) [Option]\nC) [Option]\nD) [Option]\n\n\n\n\n\n\n\n\n\n\n\n**Correct Answer:** [Letter]\n**Explanation:** [Why this is correct and others are wrong]\n\n---\n\nMake questions progressively harder. Include at least one multi-service integration scenario. Send the questions one by one using the telegram tool. Format the text and make it compatible with telehgram and avoid having this issue \"Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 1927\"\nFinally, log every quetsion on the postgres table using the postgres insert tool. The table columns are defined as follow \"CREATE TABLE questions (\n    id SERIAL PRIMARY KEY,\n    question_text TEXT NOT NULL,\n    option_a TEXT NOT NULL,\n    option_b TEXT NOT NULL,\n    option_c TEXT NOT NULL,\n    option_d TEXT NOT NULL,\n    correct_answer CHAR(1) NOT NULL CHECK (correct_answer IN ('A', 'B', 'C', 'D')),\n    explanation TEXT,\n    service VARCHAR(100),\n    difficulty VARCHAR(20) CHECK (difficulty IN ('easy', 'medium', 'hard')),\n    category VARCHAR(100),\n    tags TEXT[],\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n)\"\""
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3,
+        "position": [
+          2304,
+          736
+        ],
+        "id": "5592e240-4d78-4361-8930-3c9c6751ff46",
+        "name": "AI Agent2"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+        "typeVersion": 1,
+        "position": [
+          2192,
+          976
+        ],
+        "id": "681bd1e9-0ba7-474e-8cbc-3b50e52a5f29",
+        "name": "Google Gemini Chat Model",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "yC6lmQMoO6FH8IBl",
+            "name": "Google Gemini(PaLM) Api account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Telegram Trigger').item.json.message.from.id }}",
+          "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Text', ``, 'string') }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "disable_web_page_preview": false,
+            "parse_mode": "Markdown"
+          }
+        },
+        "type": "n8n-nodes-base.telegramTool",
+        "typeVersion": 1.2,
+        "position": [
+          2384,
+          992
+        ],
+        "id": "9e5b28f9-4131-45f0-a87a-881defe23a27",
+        "name": "Send a text message in Telegram",
+        "webhookId": "45248473-c304-4f50-81f2-3ffe2009708e",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "mode": "list",
+            "value": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "questions",
+            "mode": "list",
+            "cachedResultName": "questions"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "id": 0,
+              "question_text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('question_text', ``, 'string') }}",
+              "option_a": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('option_a', ``, 'string') }}",
+              "option_b": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('option_b', ``, 'string') }}",
+              "option_c": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('option_c', ``, 'string') }}",
+              "option_d": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('option_d', ``, 'string') }}",
+              "correct_answer": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('correct_answer', ``, 'string') }}",
+              "explanation": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('explanation', ``, 'string') }}",
+              "service": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('service', ``, 'string') }}",
+              "difficulty": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('difficulty', ``, 'string') }}",
+              "category": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('category', ``, 'string') }}",
+              "tags": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('tags', ``, 'json') }}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "question_text",
+                "displayName": "question_text",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "option_a",
+                "displayName": "option_a",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "option_b",
+                "displayName": "option_b",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "option_c",
+                "displayName": "option_c",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "option_d",
+                "displayName": "option_d",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "correct_answer",
+                "displayName": "correct_answer",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "explanation",
+                "displayName": "explanation",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "service",
+                "displayName": "service",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "difficulty",
+                "displayName": "difficulty",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "category",
+                "displayName": "category",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "tags",
+                "displayName": "tags",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "array",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "created_at",
+                "displayName": "created_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgresTool",
+        "typeVersion": 2.6,
+        "position": [
+          2544,
+          992
+        ],
+        "id": "1613a075-f112-4170-8b05-9b1a72b59bf4",
+        "name": "Insert rows in a table in Postgres",
+        "credentials": {
+          "postgres": {
+            "id": "RWvTxLtJCYmoeqHK",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "updates": [
+            "message"
+          ],
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.telegramTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          912,
+          624
+        ],
+        "id": "4e88dc77-afa3-4701-baea-e4b95a987b5b",
+        "name": "Telegram Trigger",
+        "webhookId": "057e7d4d-e172-40c8-986a-0396d1be1d60",
+        "credentials": {
+          "telegramApi": {
+            "id": "7QytSt9DasssP4d0",
+            "name": "Career Mentor"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "quiz-topic",
+                "name": "quizTopic",
+                "value": "={{ $json.body.message.text.split(' ')[1] || 'random' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "3757407f-46f8-4b82-a6bd-358177c8c3f7",
+        "name": "Extract Quiz Topic1",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.3,
+        "position": [
+          1344,
+          1984
+        ]
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "=Generate 5 AWS SAA-C03 exam-style questions about {{ $json.quizTopic === 'random' ? 'various AWS services' : $json.quizTopic }}.\n",
+          "options": {
+            "systemMessage": "=You are an AWS Solutions Architect Associate (SAA-C03) exam expert and coach.\n\nFormat each question as:\n\n**Q[number]/5: [Scenario description]**\n\n**Question:** [What is the best solution?]\n\nA) [Option]\nB) [Option]\nC) [Option]\nD) [Option]\n\n\n\n\n\n\n\n\n\n\n\n**Correct Answer:** [Letter]\n**Explanation:** [Why this is correct and others are wrong]\n\n---\n\nMake questions progressively harder. Include at least one multi-service integration scenario. Send the questions one by one using the telegram tool. Format the text and make it compatible with telehgram and avoid having this issue \"Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 1927\"\nFinally, log every quetsion on the postgres table using the postgres insert tool. The table columns are defined as follow \"CREATE TABLE questions (\n    id SERIAL PRIMARY KEY,\n    question_text TEXT NOT NULL,\n    option_a TEXT NOT NULL,\n    option_b TEXT NOT NULL,\n    option_c TEXT NOT NULL,\n    option_d TEXT NOT NULL,\n    correct_answer CHAR(1) NOT NULL CHECK (correct_answer IN ('A', 'B', 'C', 'D')),\n    explanation TEXT,\n    service VARCHAR(100),\n    difficulty VARCHAR(20) CHECK (difficulty IN ('easy', 'medium', 'hard')),\n    category VARCHAR(100),\n    tags TEXT[],\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n)\"\""
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3,
+        "position": [
+          1632,
+          1984
+        ],
+        "id": "911b52c8-3357-41aa-a531-d2c7a62a4253",
+        "name": "AI Agent4"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ab282933-603d-4e20-b03f-88e0e1d5533f",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          752,
+          1984
+        ],
+        "id": "a2aaea53-a70e-4f3a-8570-05da3f5b9fd0",
+        "name": "Webhook1",
+        "webhookId": "ab282933-603d-4e20-b03f-88e0e1d5533f"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "088e306a-dde8-4034-a2ea-faa4d0b1215d",
+                "name": "method",
+                "value": "webhook",
+                "type": "string"
+              },
+              {
+                "id": "d4303b9f-4f02-446c-8c36-68dd55ab6ab3",
+                "name": "message",
+                "value": "={{ $json.body.question }}",
+                "type": "string"
+              },
+              {
+                "id": "2acf281c-3921-4f53-a8b2-dcf5b2d8f437",
+                "name": "id",
+                "value": "={{ $json.body.user_id }}",
+                "type": "number"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          1024,
+          1984
+        ],
+        "id": "5ba4a7e5-770d-4b4f-8d2d-f1a459a13f21",
+        "name": "Edit Fields3"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+        "typeVersion": 1,
+        "position": [
+          1584,
+          2176
+        ],
+        "id": "66de3112-6153-453f-86a6-42f026e430d1",
+        "name": "Google Gemini Chat Model1",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "yC6lmQMoO6FH8IBl",
+            "name": "Google Gemini(PaLM) Api account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          2064,
+          1984
+        ],
+        "id": "7e134e73-d1f6-4565-832e-8ece9b45d5da",
+        "name": "Respond to Webhook"
+      }
+    ],
+    "connections": {
+      "Daily Learning Trigger": {
+        "main": [
+          [
+            {
+              "node": "Get Current Progress",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Current Progress": {
+        "main": [
+          [
+            {
+              "node": "Calculate Day & Service",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Calculate Day & Service": {
+        "main": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "When clicking ‘Execute workflow’": {
+        "main": [
+          [
+            {
+              "node": "Execute a SQL query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent": {
+        "main": [
+          [
+            {
+              "node": "Insert rows in a table",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert rows in a table": {
+        "main": [
+          [
+            {
+              "node": "Basic LLM Chain",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Basic LLM Chain": {
+        "main": [
+          [
+            {
+              "node": "Send a text message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Groq Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Basic LLM Chain",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If": {
+        "main": [
+          [
+            {
+              "node": "Switch",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Switch": {
+        "main": [
+          [
+            {
+              "node": "Get AWS service",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Extract Quiz Topic",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Store Daily Progress": {
+        "main": [
+          [
+            {
+              "node": "Send to Telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Command Router": {
+        "main": [
+          [],
+          [],
+          [
+            {
+              "node": "Get Progress Stats",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [],
+          [],
+          [
+            {
+              "node": "Extract Cheatsheet Service",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Get Wrong Answers",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generate Info Response": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent1",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Info Response": {
+        "main": [
+          []
+        ]
+      },
+      "Extract Quiz Topic": {
+        "main": [
+          [
+            {
+              "node": "AI Agent2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Quiz": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Progress Stats": {
+        "main": [
+          [
+            {
+              "node": "Send Progress",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Progress": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Scenario": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Tips": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Cheatsheet": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Wrong Answers": {
+        "main": [
+          [
+            {
+              "node": "Send Review",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Review": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Next Question": {
+        "main": [
+          [
+            {
+              "node": "Send Next Question",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Answer": {
+        "main": [
+          [
+            {
+              "node": "Is Valid Answer?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Valid Answer?": {
+        "main": [
+          [
+            {
+              "node": "Get Current Question",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Get Next Question",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Current Question": {
+        "main": [
+          [
+            {
+              "node": "Validate Answer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Answer": {
+        "main": [
+          [
+            {
+              "node": "Store Answer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Store Answer": {
+        "main": [
+          [
+            {
+              "node": "Send Answer Feedback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Answer Feedback": {
+        "main": [
+          [
+            {
+              "node": "Get Next Question",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Next Question": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Daily Learning Trigger1": {
+        "main": [
+          [
+            {
+              "node": "Get Current Progress1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Current Progress1": {
+        "main": [
+          [
+            {
+              "node": "Calculate Day & Service1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Service Name": {
+        "main": [
+          [
+            {
+              "node": "AI Agent1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get AWS service": {
+        "main": [
+          [
+            {
+              "node": "Extract Service Name",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent1": {
+        "main": [
+          [
+            {
+              "node": "Send Info Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Search in Tavily": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent1",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Google Gemini Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent2",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send a text message in Telegram": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent2",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert rows in a table in Postgres": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent2",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Telegram Trigger": {
+        "main": [
+          [
+            {
+              "node": "If",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Quiz Topic1": {
+        "main": [
+          [
+            {
+              "node": "AI Agent4",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent4": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook1": {
+        "main": [
+          [
+            {
+              "node": "Edit Fields3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Edit Fields3": {
+        "main": [
+          [
+            {
+              "node": "Extract Quiz Topic1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Google Gemini Chat Model1": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent4",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Respond to Webhook": {
+        "main": [
+          []
+        ]
+      }
+    },
+    "pinData": {},
+    "meta": {
+      "templateCredsSetupCompleted": true,
+      "instanceId": "1c8428aba30cc5950a9bbd1a0446a11a66b4eb1cd9d50a45a8f537ed2218e5f2"
+    }
+  }
