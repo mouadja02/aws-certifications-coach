@@ -1,0 +1,35 @@
+# Requirements for AWS Certifications Coach
+# Optimized for Streamlit Cloud + Snowflake
+
+# ============================================
+# STREAMLIT FRAMEWORK
+# ============================================
+streamlit==1.29.0
+
+# ============================================
+# SNOWFLAKE CONNECTOR (Native integration with Streamlit)
+# ============================================
+snowflake-connector-python==3.6.0
+snowflake-snowpark-python==1.11.1
+
+# ============================================
+# AUTHENTICATION & SECURITY
+# ============================================
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
+# ============================================
+# HTTP CLIENT
+# ============================================
+requests==2.31.0
+
+# ============================================
+# DATA MANIPULATION
+# ============================================
+pandas==2.1.4
+
+# ============================================
+# UTILITIES
+# ============================================
+python-dotenv==1.0.0
+pytz==2023.3.post1
