@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import get_user_by_email, save_chat_message
+from ai_service import AIService
 
 def get_user_from_db(email: str):
     """Fetch user data from Snowflake"""
@@ -132,29 +133,14 @@ def show_dashboard():
 
         with st.chat_message("assistant"):
             with st.spinner("🧠 Thinking..."):
-                # Generate AI response (using fallback for now)
-                # TODO: Integrate with n8n webhooks for AI responses
+                # Generate AI response with certification context
+                ai_service = AIService()
                 try:
-                    response_text = f"""Thank you for your question about {user.get('target_certification', 'AWS certifications')}!
-                    
-I'm here to help you prepare for your AWS certification. While the AI service is being configured, here are some general tips:
-
-1. **Understand the Exam Blueprint**: Review the official AWS exam guide for your target certification
-2. **Hands-on Practice**: Use AWS Free Tier to gain practical experience
-3. **Study Resources**: 
-   - AWS Official Documentation
-   - AWS Training and Certification portal
-   - Practice exams
-4. **Focus Areas**: 
-   - Core AWS services (EC2, S3, VPC, IAM)
-   - Best practices and architecture patterns
-   - Security and compliance
-   - Cost optimization
-
-Your question: "{prompt}"
-
-For detailed AI-powered answers, please ensure the n8n workflow is configured and active."""
-                    
+                    response_text = ai_service.answer_question(
+                        user["id"], 
+                        prompt,
+                        context=user["target_certification"]
+                    )
                     # Save to Snowflake
                     save_chat_message(user["id"], prompt, response_text)
                 except Exception as e:

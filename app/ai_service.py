@@ -71,7 +71,7 @@ class AIService:
             print(f"❌ n8n webhook request failed: {e}")
             return self._get_fallback_response("Connection error")
     
-    async def answer_question(
+    def answer_question(
         self,
         user_id: int,
         question: str,
@@ -104,7 +104,7 @@ class AIService:
             print(f"❌ Error in chat service: {e}")
             return self._get_fallback_response(question)
     
-    async def generate_exam_practice(
+    def generate_exam_practice(
         self,
         user_id: int,
         certification: str,
@@ -146,7 +146,7 @@ class AIService:
             print(f"❌ Error in exam service: {e}")
             return {"error": str(e)}
     
-    async def get_study_tricks(
+    def get_study_tricks(
         self,
         user_id: int,
         certification: str,
@@ -179,7 +179,7 @@ class AIService:
             print(f"❌ Error in tricks service: {e}")
             return self._get_fallback_tricks(topic)
     
-    async def evaluate_answer(
+    def evaluate_answer(
         self,
         user_id: int,
         question: str,
@@ -326,9 +326,9 @@ if __name__ == "__main__":
     # Test the AI service
     import asyncio
     
-    async def test():
+    def test():
         service = AIService()
-        response = await service.answer_question(
+        response = service.answer_question(
             user_id=1,
             question="What is Amazon S3 and what are its main features?"
         )
