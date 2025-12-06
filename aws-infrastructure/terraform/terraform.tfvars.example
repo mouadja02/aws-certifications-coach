@@ -1,22 +1,16 @@
-# Example Terraform Variables
+# AWS Free Tier Configuration Example
 # Copy this file to terraform.tfvars and fill in your values
 
 aws_region  = "us-east-1"
 environment = "production"
 account_id  = "123456789012"  # Your AWS account ID
 
-# Update this to your IP address for SSH access
-admin_ip = "YOUR_IP_ADDRESS/32"
+# Security: Update this to your IP address
+admin_ip = "YOUR_IP_ADDRESS/32"  # e.g., "203.0.113.1/32"
 
-# Database Configuration
-db_name          = "aws_certifications_prod"
-db_username      = "awscoach_prod"
-db_password      = "CHANGE_THIS_STRONG_PASSWORD"  # Min 20 characters
-db_instance_class = "db.t3.micro"
+# SSH Key (create in AWS EC2 console first)
+ssh_key_name = "aws-coach-key"
 
-# N8N Configuration
-n8n_instance_type = "t3.small"
-ssh_key_name      = "your-ssh-key-name"
-n8n_username      = "your_n8n_username"
-n8n_password      = "CHANGE_THIS_STRONG_PASSWORD"  # Min 20 characters
-
+# n8n Configuration
+n8n_username = "admin"
+n8n_password = "CHANGE_THIS_STRONG_PASSWORD"  # Min 16 characters

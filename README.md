@@ -1,29 +1,43 @@
 # AWS Certifications Coach
 
-A production-ready, AI-powered learning platform to help students prepare for AWS certification exams. Designed for deployment on AWS with Streamlit Cloud, featuring enterprise-grade security, auto-scaling, and comprehensive monitoring.
+A production-ready, AI-powered learning platform to help students prepare for AWS certification exams. **Optimized for AWS Free Tier + Snowflake + Streamlit Cloud** for minimal cost deployment.
 
 ## 🎯 Overview
 
 AWS Certifications Coach provides:
-- **AI-Powered Chat**: Get instant answers to AWS certification questions
-- **Progress Tracking**: Monitor your learning journey
+- **AI-Powered Chat**: Get instant answers to AWS certification questions via n8n workflows
+- **Progress Tracking**: Monitor your learning journey with Snowflake analytics
 - **Study Resources**: Access curated videos and materials
 - **Practice Tests**: Test your knowledge with realistic exams
 - **Multiple Certifications**: Support for all AWS certification paths
 
-## 🏗️ Architecture
+## 💰 Cost-Optimized Architecture
+
+**Total Monthly Cost: ~$0** (within free tiers)
 
 ```
-Streamlit Cloud (Frontend - Global CDN)
-         ↓ HTTPS/TLS 1.3
-AWS Elastic Beanstalk (Backend API - Auto-scaled)
+Streamlit Cloud (Frontend) - FREE
+         ↓ HTTPS
+AWS Elastic Beanstalk (Backend) - FREE TIER
          ↓
-    ┌────┴────┬──────────┬──────────┐
-    ↓         ↓          ↓          ↓
-AWS RDS   AWS EC2    AWS S3   AWS Secrets
-(PostgreSQL) (n8n)  (Backups) Manager
-Multi-AZ   Workflows Encrypted Rotated
+    ┌────┴────┬──────────┐
+    ↓         ↓          ↓
+Snowflake  AWS EC2    AWS S3
+(FREE)   (t2.micro)  (5GB FREE)
+         FREE TIER
 ```
+
+### Free Tier Breakdown
+
+| Service | Free Tier | Usage | Cost |
+|---------|-----------|-------|------|
+| **Streamlit Cloud** | Unlimited | Frontend hosting | $0 |
+| **Snowflake** | $400 credits | Database storage | $0 |
+| **AWS EC2** | 750 hrs/month | n8n (t2.micro) | $0 |
+| **Elastic Beanstalk** | 750 hrs/month | Backend (t2.micro) | $0 |
+| **S3** | 5 GB | Backups | $0 |
+| **Data Transfer** | 100 GB/month | API calls | $0 |
+| **Total** | | | **$0/month** |
 
 ## ✨ Features
 
@@ -35,168 +49,322 @@ Multi-AZ   Workflows Encrypted Rotated
 - ✅ Multiple certification paths
 
 ### Production Features
-- ✅ **Security**: Bcrypt hashing, JWT auth, rate limiting, HTTPS/TLS 1.3
-- ✅ **Scalability**: Auto-scaling 2-4 instances, load balancing
-- ✅ **Monitoring**: CloudWatch logs/alarms, Sentry error tracking
-- ✅ **Reliability**: Multi-AZ database, automated backups
-- ✅ **Compliance**: GDPR ready, audit logging
+- ✅ **Security**: Bcrypt hashing, JWT auth, rate limiting, HTTPS/TLS
+- ✅ **Scalability**: Snowflake auto-scales, AWS auto-scaling
+- ✅ **Monitoring**: CloudWatch (free tier) + Sentry
+- ✅ **Reliability**: Snowflake 99.99% uptime
+- ✅ **Cost**: $0/month within free tiers
 
-## 🚀 Quick Start
+## 🚀 Quick Start (30 Minutes)
 
 ### Prerequisites
 
-- AWS account with billing configured
-- Domain name (optional but recommended)
-- Terraform installed (v1.0+)
-- AWS CLI installed and configured
-- Streamlit Cloud account (free)
+1. **Snowflake Account** (Free trial - $400 credits)
+   - Sign up at https://signup.snowflake.com
+   - Choose AWS as cloud provider
+   - Select same region as your AWS deployment
 
-### 1. Clone Repository
+2. **AWS Account** (Free tier)
+   - Sign up at https://aws.amazon.com/free
+   - Enable Free Tier usage alerts
 
-```bash
-git clone https://github.com/your-username/aws-certifications-coach.git
-cd aws-certifications-coach
+3. **Streamlit Cloud Account** (Free)
+   - Sign up at https://share.streamlit.io
+
+4. **Tools**
+   - Terraform installed
+   - AWS CLI configured
+   - Git installed
+
+### Step 1: Setup Snowflake (5 min)
+
+```sql
+-- Login to Snowflake Web UI and run:
+
+-- Create database
+CREATE DATABASE AWS_CERTIFICATIONS;
+USE DATABASE AWS_CERTIFICATIONS;
+USE SCHEMA PUBLIC;
+
+-- Create warehouse (XSmall for free tier)
+CREATE WAREHOUSE COMPUTE_WH 
+  WAREHOUSE_SIZE = XSMALL 
+  AUTO_SUSPEND = 60 
+  AUTO_RESUME = TRUE;
+
+-- Create tables (run backend/init_db.sql queries adapted for Snowflake)
+
+-- Get your account identifier
+SELECT CURRENT_ACCOUNT();  -- Save this for configuration
 ```
 
-### 2. Deploy AWS Infrastructure
+### Step 2: Deploy AWS Infrastructure (10 min)
 
 ```bash
 cd aws-infrastructure/terraform
 
-# Configure variables
+# Configure
 cp terraform.tfvars.example terraform.tfvars
-nano terraform.tfvars  # Edit with your values
+nano terraform.tfvars  # Add your values
 
-# Deploy
+# Create SSH key in AWS Console first
+# EC2 > Key Pairs > Create Key Pair > Download .pem file
+
+# Deploy (FREE TIER: Only EC2 t2.micro + S3)
 terraform init
 terraform apply
+
+# Save the n8n URL from output
 ```
 
-### 3. Configure Secrets
+### Step 3: Deploy Backend to Elastic Beanstalk (FREE TIER - 5 min)
 
 ```bash
-# Generate secrets
-openssl rand -hex 32  # For JWT
+# Install EB CLI
+pip install awsebcli
 
-# Store in AWS Secrets Manager
-aws secretsmanager create-secret \
-    --name prod/aws-coach/db \
-    --secret-string '{"username":"awscoach_prod","password":"YOUR_PASSWORD","host":"YOUR_RDS_ENDPOINT","port":"5432","dbname":"aws_certifications_prod"}'
-```
-
-### 4. Deploy Backend
-
-```bash
-# Initialize Elastic Beanstalk
+# Initialize
 eb init -p python-3.11 aws-certifications-coach --region us-east-1
 
-# Create environment
-eb create aws-coach-prod --instance-type t3.small --min-instances 2
+# Create environment (FREE TIER: t2.micro)
+eb create aws-coach-prod \
+    --instance-type t2.micro \
+    --single \
+    --envvars \
+        SNOWFLAKE_ACCOUNT=abc12345.us-east-1,\
+        SNOWFLAKE_USER=your_user,\
+        SNOWFLAKE_PASSWORD=your_pass,\
+        SNOWFLAKE_WAREHOUSE=COMPUTE_WH,\
+        SNOWFLAKE_DATABASE=AWS_CERTIFICATIONS,\
+        APP_ENV=production
 
 # Deploy
 eb deploy
+
+# Get URL
+eb status
 ```
 
-### 5. Deploy Frontend (Streamlit Cloud)
+### Step 4: Configure n8n (3 min)
 
-1. Push code to GitHub
-2. Go to https://share.streamlit.app
-3. Connect repository
-4. Set main file: `frontend/home.py`
-5. Add secrets in Streamlit Cloud settings
+```bash
+# Get n8n IP from Terraform output
+N8N_IP=$(terraform output -raw n8n_public_ip)
+
+# Access n8n
+open http://${N8N_IP}:5678
+
+# Login with credentials from terraform.tfvars
+# Import workflow.json from repository
+# Activate all workflows
+```
+
+### Step 5: Deploy Frontend to Streamlit Cloud (5 min)
+
+1. **Push to GitHub**
+```bash
+git add .
+git commit -m "Configure for Snowflake + AWS Free Tier"
+git push origin main
+```
+
+2. **Deploy on Streamlit**
+   - Go to https://share.streamlit.io
+   - Click "New app"
+   - Select repository
+   - Main file: `frontend/home.py`
+   - Python version: 3.11
+
+3. **Add Secrets** (Streamlit Cloud dashboard > Settings > Secrets)
+```toml
+[general]
+BACKEND_URL = "http://your-eb-url.elasticbeanstalk.com"
+
+[connections.snowflake]
+account = "abc12345.us-east-1"
+user = "your_username"
+password = "your_password"
+role = "ACCOUNTADMIN"
+warehouse = "COMPUTE_WH"
+database = "AWS_CERTIFICATIONS"
+schema = "PUBLIC"
+```
+
+### Step 6: Verify (2 min)
+
+```bash
+# Test backend
+curl http://your-eb-url.elasticbeanstalk.com/health
+
+# Test n8n
+curl http://${N8N_IP}:5678/healthz
+
+# Test frontend
+open https://your-app.streamlit.app
+```
 
 ## 📁 Project Structure
 
 ```
 aws-certifications-coach/
 ├── backend/
-│   ├── main.py                 # FastAPI application
-│   ├── database.py             # Database operations
-│   ├── ai_service.py           # AI integration
+│   ├── main.py                 # FastAPI with Snowflake
+│   ├── database.py             # Snowflake connector
+│   ├── ai_service.py           # n8n integration
 │   ├── auth.py                 # Authentication
 │   ├── models.py               # Data models
-│   ├── requirements.txt        # Dependencies
-│   └── init_db.sql            # Database schema
+│   └── requirements.txt        # Dependencies
 ├── frontend/
-│   ├── home.py                 # Main Streamlit app
-│   ├── dashboard.py            # User dashboard
-│   ├── utils.py                # Helper functions
+│   ├── home.py                 # Streamlit app
+│   ├── dashboard.py            # Dashboard
+│   ├── utils.py                # Helpers
 │   ├── requirements.txt        # Dependencies
-│   ├── .streamlit/
-│   │   ├── config.toml         # Streamlit config
-│   │   └── secrets.toml.example # Secrets template
-│   └── images/
-│       └── logo.png
+│   └── .streamlit/
+│       ├── config.toml
+│       └── secrets.toml.example
 ├── aws-infrastructure/
 │   └── terraform/
-│       ├── main.tf             # Infrastructure as Code
-│       ├── variables.tf        # Terraform variables
+│       ├── main.tf             # AWS Free Tier resources
+│       ├── variables.tf
 │       └── terraform.tfvars.example
 ├── scripts/
-│   ├── backup_database.sh      # Backup script
-│   └── restore_database.sh     # Restore script
-├── .env.example                # Environment template
-├── .gitignore
+│   ├── backup_database.sh
+│   └── restore_database.sh
 └── workflow.json               # n8n workflows
 ```
 
 ## 🔒 Security
 
 - **Authentication**: Bcrypt password hashing + JWT tokens
-- **Encryption**: TLS 1.3 in transit, AES-256 at rest
-- **Secrets**: AWS Secrets Manager with rotation
-- **Network**: VPC with security groups
+- **Encryption**: TLS in transit, Snowflake encryption at rest
+- **Secrets**: AWS Secrets Manager + Streamlit Secrets
+- **Network**: AWS Security Groups, Snowflake IP whitelist
 - **Rate Limiting**: 60 requests/minute per IP
-- **Headers**: HSTS, CSP, X-Frame-Options, etc.
-- **Compliance**: GDPR ready with data export/deletion APIs
 
-## 📊 Monitoring
+## 📊 Snowflake Setup Details
 
-- **CloudWatch**: Logs, metrics, and alarms
-- **Sentry**: Real-time error tracking
-- **Health Checks**: Automated endpoint monitoring
-- **Alarms**: CPU, memory, errors, failed logins
+### Database Schema
 
-## 💰 Cost Estimate
+```sql
+-- Users table
+CREATE TABLE logged_users (
+    id INTEGER AUTOINCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    age INTEGER,
+    target_certification VARCHAR(255) NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    updated_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    last_login TIMESTAMP_NTZ
+);
 
-| Service | Configuration | Monthly Cost |
-|---------|--------------|--------------|
-| RDS | db.t3.micro Multi-AZ | $30 |
-| EC2 | t3.small (n8n) | $15 |
-| Elastic Beanstalk | 2x t3.small | $30 |
-| Other | S3, CloudWatch, etc | $17 |
-| **Total** | | **~$92/month** |
+-- Chat history
+CREATE TABLE chat_history (
+    id INTEGER AUTOINCREMENT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
 
-**With Reserved Instances**: ~$55/month (40% savings)
+-- User progress
+CREATE TABLE user_progress (
+    id INTEGER AUTOINCREMENT PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE,
+    study_time_minutes INTEGER DEFAULT 0,
+    practice_tests_taken INTEGER DEFAULT 0,
+    average_score INTEGER DEFAULT 0,
+    progress_percentage INTEGER DEFAULT 0,
+    last_activity TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    updated_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+```
 
-## 📚 Documentation
+### Snowflake Cost Optimization
 
-- [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md) - Complete deployment instructions
-- [Security Best Practices](SECURITY_BEST_PRACTICES.md) - Comprehensive security guide
-- [Final Deployment Checklist](FINAL_DEPLOYMENT_CHECKLIST.md) - Pre-launch verification
-- [Quick Deployment Reference](QUICK_DEPLOYMENT_REFERENCE.md) - 30-minute quick start
-- [Migration Summary](MIGRATION_SUMMARY.md) - Docker to cloud migration details
+```sql
+-- Auto-suspend after 5 minutes of inactivity
+ALTER WAREHOUSE COMPUTE_WH SET AUTO_SUSPEND = 300;
 
-## 🛠️ Technology Stack
+-- Auto-resume when queries arrive
+ALTER WAREHOUSE COMPUTE_WH SET AUTO_RESUME = TRUE;
 
-| Component | Technology |
-|-----------|------------|
-| Frontend | Streamlit 1.29.0 |
-| Backend | FastAPI 0.108.0 |
-| Database | PostgreSQL 15 (AWS RDS) |
-| AI/Workflows | n8n (self-hosted) |
-| Infrastructure | AWS (Terraform) |
-| Hosting | Streamlit Cloud + Elastic Beanstalk |
-| Monitoring | CloudWatch + Sentry |
+-- Use XSmall warehouse (cheapest, still powerful)
+ALTER WAREHOUSE COMPUTE_WH SET WAREHOUSE_SIZE = XSMALL;
+
+-- Monitor credit usage
+SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
+ORDER BY START_TIME DESC
+LIMIT 10;
+```
+
+## 🛠️ AWS Free Tier Resources
+
+### What's Deployed
+
+| Resource | Type | Free Tier | Monthly Limit |
+|----------|------|-----------|---------------|
+| EC2 (n8n) | t2.micro | ✅ Yes | 750 hours |
+| Elastic Beanstalk | t2.micro | ✅ Yes | 750 hours |
+| S3 Storage | Standard | ✅ Yes | 5 GB |
+| Data Transfer | Outbound | ✅ Yes | 100 GB |
+| CloudWatch | Logs/Metrics | ✅ Yes | 10 metrics |
+| Secrets Manager | 2 secrets | ✅ Yes | 30 days trial |
+
+### Free Tier Limits
+
+```bash
+# Monitor your usage
+aws ce get-cost-and-usage \
+    --time-period Start=2024-01-01,End=2024-01-31 \
+    --granularity MONTHLY \
+    --metrics BlendedCost
+
+# Set billing alert
+aws budgets create-budget \
+    --account-id 123456789012 \
+    --budget file://budget.json
+```
+
+## 📈 Monitoring
+
+### CloudWatch (Free Tier)
+- 10 custom metrics
+- 10 alarms
+- 1GB log ingestion
+- 5GB log storage
+
+### Snowflake Monitoring
+```sql
+-- Query performance
+SELECT * FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY())
+ORDER BY START_TIME DESC
+LIMIT 100;
+
+-- Storage usage
+SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.DATABASE_STORAGE_USAGE_HISTORY
+ORDER BY USAGE_DATE DESC;
+```
 
 ## 🔧 Development
 
-### Local Setup
+### Local Setup with Snowflake
 
 ```bash
 # Backend
 cd backend
 pip install -r requirements.txt
+
+# Create .env with Snowflake credentials
+cp .env.example .env
+nano .env
+
+# Test connection
+python database.py
+
+# Run backend
 python main.py
 
 # Frontend
@@ -205,107 +373,114 @@ pip install -r requirements.txt
 streamlit run home.py
 ```
 
-### Environment Variables
+### Testing Snowflake Connection
 
-Copy `.env.example` to `.env` and configure:
+```python
+import snowflake.connector
 
-```bash
-# Database
-DB_HOST=your-db-host
-DB_PORT=5432
-DB_NAME=aws_certifications_prod
-DB_USER=awscoach_prod
-DB_PASSWORD=your-password
+conn = snowflake.connector.connect(
+    account='abc12345.us-east-1',
+    user='your_user',
+    password='your_password',
+    warehouse='COMPUTE_WH',
+    database='AWS_CERTIFICATIONS',
+    schema='PUBLIC'
+)
 
-# Security
-JWT_SECRET_KEY=your-jwt-secret
-SECRET_KEY=your-secret-key
-
-# n8n Webhooks
-N8N_CHAT_WEBHOOK_URL=https://your-n8n/webhook/chat
-```
-
-## 🧪 Testing
-
-```bash
-# Security scanning
-safety check -r backend/requirements.txt
-bandit -r backend/
-
-# Load testing
-ab -n 1000 -c 50 https://your-api-url/health
+cursor = conn.cursor()
+cursor.execute("SELECT CURRENT_VERSION()")
+print(cursor.fetchone())
 ```
 
 ## 🔄 Backup & Recovery
 
-### Automated Backups
-- RDS: Daily automated backups (7-day retention)
-- S3: Manual backups via script
+### Snowflake Time Travel (Free - 1 day)
 
-### Manual Backup
-```bash
-./scripts/backup_database.sh
+```sql
+-- Restore table to 1 hour ago
+CREATE OR REPLACE TABLE logged_users 
+AS SELECT * FROM logged_users 
+AT(OFFSET => -3600);
+
+-- View historical data
+SELECT * FROM chat_history 
+AT(TIMESTAMP => '2024-01-15 10:00:00'::TIMESTAMP_NTZ);
 ```
 
-### Restore
+### S3 Backups (Free - 5GB)
+
 ```bash
-./scripts/restore_database.sh backup-file.sql.gz
+# Manual backup
+./scripts/backup_database.sh
+
+# Automated via CloudWatch Events (FREE)
 ```
 
 ## 🆘 Troubleshooting
 
-### Backend Issues
-```bash
-eb logs              # View logs
-eb ssh               # SSH into instance
-eb restart           # Restart application
+### Snowflake Connection Issues
+
+```python
+# Check credentials
+import snowflake.connector
+from snowflake.connector import OperationalError
+
+try:
+    conn = snowflake.connector.connect(...)
+    print("✅ Connected!")
+except OperationalError as e:
+    print(f"❌ Error: {e}")
 ```
 
-### Database Issues
-```bash
-# Test connection
-psql -h YOUR_RDS_ENDPOINT -U awscoach_prod -d aws_certifications_prod
+### AWS Free Tier Exceeded
 
-# Check status
-aws rds describe-db-instances --db-instance-identifier aws-coach-db
+```bash
+# Check your usage
+aws ce get-cost-forecast \
+    --time-period Start=2024-01-01,End=2024-01-31 \
+    --metric UNBLENDED_COST \
+    --granularity MONTHLY
 ```
 
-### Frontend Issues
-- Check Streamlit Cloud logs in dashboard
-- Verify secrets are configured correctly
-- Test backend API connectivity
+## 💡 Tips for Staying in Free Tier
+
+1. **EC2**: Use t2.micro only (750 hours/month free)
+2. **RDS**: Not used - Snowflake instead (free trial)
+3. **S3**: Keep under 5GB, use lifecycle policies
+4. **Data Transfer**: Keep under 100GB/month
+5. **Elastic Beanstalk**: Use single instance mode
+6. **Stop Resources**: Stop EC2 when not using
+
+## 📚 Documentation
+
+- **Snowflake Docs**: https://docs.snowflake.com
+- **AWS Free Tier**: https://aws.amazon.com/free
+- **Streamlit Docs**: https://docs.streamlit.io
+- **n8n Docs**: https://docs.n8n.io
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create feature branch
+3. Commit changes
+4. Push to branch
+5. Open Pull Request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - See LICENSE file
 
 ## 🙏 Acknowledgments
 
-- AWS for cloud infrastructure
-- Streamlit for frontend hosting
+- Snowflake for seamless Streamlit integration
+- AWS Free Tier for infrastructure
+- Streamlit Cloud for free hosting
 - n8n for workflow automation
-- OpenAI/Anthropic for AI capabilities
-- Open source community
-
-## 📞 Support
-
-- **Documentation**: See documentation files
-- **Issues**: GitHub Issues
-- **Email**: support@your-domain.com
 
 ---
 
-**Version**: 2.0.0  
-**Status**: ✅ Production Ready  
-**Last Updated**: December 2025
+**Version**: 2.1.0  
+**Status**: ✅ Production Ready (Snowflake + AWS Free Tier)  
+**Monthly Cost**: $0 (within free tiers)
 
 **Made with ❤️ for AWS certification learners worldwide**
-

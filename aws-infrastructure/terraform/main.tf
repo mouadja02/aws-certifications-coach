@@ -1,5 +1,5 @@
-# Terraform Configuration for AWS Certifications Coach Infrastructure
-# This creates all necessary AWS resources for production deployment
+# Terraform Configuration for AWS Certifications Coach
+# Optimized for AWS FREE TIER - Minimal resources
 
 terraform {
   required_version = ">= 1.0"
@@ -9,13 +9,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-  }
-  
-  backend "s3" {
-    bucket = "aws-certifications-coach-terraform-state"
-    key    = "production/terraform.tfstate"
-    region = "us-east-1"
-    encrypt = true
   }
 }
 
@@ -27,164 +20,36 @@ provider "aws" {
       Project     = "AWS Certifications Coach"
       Environment = var.environment
       ManagedBy   = "Terraform"
+      FreeTier    = "true"
     }
   }
 }
 
 # ============================================
-# VPC AND NETWORKING
+# VPC (Default VPC - Free Tier)
 # ============================================
 
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-  
-  tags = {
-    Name = "aws-coach-vpc"
-  }
+data "aws_vpc" "default" {
+  default = true
 }
 
-resource "aws_subnet" "public_a" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.aws_region}a"
-  map_public_ip_on_launch = true
-  
-  tags = {
-    Name = "aws-coach-public-a"
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
   }
-}
-
-resource "aws_subnet" "public_b" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "${var.aws_region}b"
-  map_public_ip_on_launch = true
-  
-  tags = {
-    Name = "aws-coach-public-b"
-  }
-}
-
-resource "aws_subnet" "private_a" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.10.0/24"
-  availability_zone = "${var.aws_region}a"
-  
-  tags = {
-    Name = "aws-coach-private-a"
-  }
-}
-
-resource "aws_subnet" "private_b" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.11.0/24"
-  availability_zone = "${var.aws_region}b"
-  
-  tags = {
-    Name = "aws-coach-private-b"
-  }
-}
-
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-  
-  tags = {
-    Name = "aws-coach-igw"
-  }
-}
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-  
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
-  }
-  
-  tags = {
-    Name = "aws-coach-public-rt"
-  }
-}
-
-resource "aws_route_table_association" "public_a" {
-  subnet_id      = aws_subnet.public_a.id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "public_b" {
-  subnet_id      = aws_subnet.public_b.id
-  route_table_id = aws_route_table.public.id
 }
 
 # ============================================
 # SECURITY GROUPS
 # ============================================
 
-resource "aws_security_group" "rds" {
-  name        = "aws-coach-rds-sg"
-  description = "Security group for RDS PostgreSQL"
-  vpc_id      = aws_vpc.main.id
-  
-  ingress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.backend.id]
-    description     = "PostgreSQL from backend"
-  }
-  
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  tags = {
-    Name = "aws-coach-rds-sg"
-  }
-}
-
-resource "aws_security_group" "backend" {
-  name        = "aws-coach-backend-sg"
-  description = "Security group for backend API"
-  vpc_id      = aws_vpc.main.id
-  
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTP"
-  }
-  
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTPS"
-  }
-  
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  tags = {
-    Name = "aws-coach-backend-sg"
-  }
-}
-
 resource "aws_security_group" "n8n" {
   name        = "aws-coach-n8n-sg"
   description = "Security group for n8n instance"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.default.id
   
+  # SSH access (restrict to your IP in production)
   ingress {
     from_port   = 22
     to_port     = 22
@@ -193,6 +58,7 @@ resource "aws_security_group" "n8n" {
     description = "SSH for admin"
   }
   
+  # HTTP for Let's Encrypt
   ingress {
     from_port   = 80
     to_port     = 80
@@ -201,12 +67,22 @@ resource "aws_security_group" "n8n" {
     description = "HTTP"
   }
   
+  # HTTPS for n8n
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
     description = "HTTPS"
+  }
+  
+  # n8n direct access (can be removed after SSL setup)
+  ingress {
+    from_port   = 5678
+    to_port     = 5678
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "n8n HTTP (temporary)"
   }
   
   egress {
@@ -222,55 +98,122 @@ resource "aws_security_group" "n8n" {
 }
 
 # ============================================
-# RDS POSTGRESQL
+# EC2 INSTANCE FOR N8N (FREE TIER ELIGIBLE)
 # ============================================
 
-resource "aws_db_subnet_group" "main" {
-  name       = "aws-coach-db-subnet-group"
-  subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+data "aws_ami" "amazon_linux_2023" {
+  most_recent = true
+  owners      = ["amazon"]
   
-  tags = {
-    Name = "aws-coach-db-subnet-group"
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+  
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 }
 
-resource "aws_db_instance" "postgres" {
-  identifier             = "aws-coach-db"
-  engine                 = "postgres"
-  engine_version         = "15.4"
-  instance_class         = var.db_instance_class
-  allocated_storage      = 20
-  storage_type           = "gp3"
-  storage_encrypted      = true
+resource "aws_instance" "n8n" {
+  ami           = data.aws_ami.amazon_linux_2023.id
+  instance_type = "t2.micro"  # FREE TIER: 750 hours/month free for 12 months
   
-  db_name  = var.db_name
-  username = var.db_username
-  password = var.db_password
+  subnet_id              = tolist(data.aws_subnets.default.ids)[0]
+  vpc_security_group_ids = [aws_security_group.n8n.id]
+  key_name              = var.ssh_key_name
   
-  multi_az               = var.environment == "production" ? true : false
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
+  user_data = <<-EOF
+              #!/bin/bash
+              set -e
+              
+              # Update system
+              yum update -y
+              
+              # Install Node.js via NVM
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+              export NVM_DIR="$HOME/.nvm"
+              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+              
+              # Install Node.js 18
+              nvm install 18
+              nvm use 18
+              nvm alias default 18
+              
+              # Install n8n globally
+              npm install -g n8n
+              
+              # Create n8n data directory
+              mkdir -p /home/ec2-user/.n8n
+              chown -R ec2-user:ec2-user /home/ec2-user/.n8n
+              
+              # Create systemd service for n8n
+              cat > /etc/systemd/system/n8n.service <<SERVICE
+              [Unit]
+              Description=n8n Workflow Automation
+              After=network.target
+              
+              [Service]
+              Type=simple
+              User=ec2-user
+              Environment="HOME=/home/ec2-user"
+              Environment="N8N_BASIC_AUTH_ACTIVE=true"
+              Environment="N8N_BASIC_AUTH_USER=${var.n8n_username}"
+              Environment="N8N_BASIC_AUTH_PASSWORD=${var.n8n_password}"
+              Environment="N8N_HOST=0.0.0.0"
+              Environment="N8N_PORT=5678"
+              Environment="N8N_PROTOCOL=http"
+              Environment="GENERIC_TIMEZONE=UTC"
+              ExecStart=/home/ec2-user/.nvm/versions/node/v18.*/bin/n8n
+              WorkingDirectory=/home/ec2-user
+              Restart=always
+              RestartSec=10
+              
+              [Install]
+              WantedBy=multi-user.target
+              SERVICE
+              
+              # Start n8n service
+              systemctl daemon-reload
+              systemctl enable n8n
+              systemctl start n8n
+              
+              # Wait for n8n to start
+              sleep 10
+              
+              echo "n8n installation complete!"
+              EOF
   
-  backup_retention_period = 7
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "sun:04:00-sun:05:00"
+  root_block_device {
+    volume_size = 8  # FREE TIER: 30 GB EBS storage free
+    volume_type = "gp2"
+    encrypted   = true
+  }
   
-  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
-  
-  skip_final_snapshot = var.environment != "production"
-  final_snapshot_identifier = var.environment == "production" ? "aws-coach-db-final-snapshot-${formatdate("YYYY-MM-DD-hhmm", timestamp())}" : null
+  # FREE TIER: No additional EBS volumes
   
   tags = {
-    Name = "aws-coach-postgresql"
+    Name = "aws-coach-n8n"
+  }
+}
+
+# Elastic IP for n8n (FREE TIER: 1 EIP free when attached)
+resource "aws_eip" "n8n" {
+  instance = aws_instance.n8n.id
+  domain   = "vpc"
+  
+  tags = {
+    Name = "aws-coach-n8n-eip"
   }
 }
 
 # ============================================
-# S3 BUCKET FOR BACKUPS
+# S3 BUCKET FOR BACKUPS (FREE TIER: 5GB)
 # ============================================
 
 resource "aws_s3_bucket" "backups" {
-  bucket = "aws-certifications-coach-backups-${var.account_id}"
+  bucket = "aws-coach-backups-${var.account_id}"
   
   tags = {
     Name = "aws-coach-backups"
@@ -299,21 +242,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id
   
   rule {
-    id     = "transition-to-ia"
+    id     = "delete-old-backups"
     status = "Enabled"
     
-    transition {
-      days          = 30
-      storage_class = "STANDARD_IA"
-    }
-    
-    transition {
-      days          = 90
-      storage_class = "GLACIER"
-    }
-    
     expiration {
-      days = 365
+      days = 30  # Keep backups for 30 days only
     }
   }
 }
@@ -328,133 +261,42 @@ resource "aws_s3_bucket_public_access_block" "backups" {
 }
 
 # ============================================
-# EC2 INSTANCE FOR N8N
+# SECRETS MANAGER (Minimal usage)
 # ============================================
 
-data "aws_ami" "amazon_linux_2023" {
-  most_recent = true
-  owners      = ["amazon"]
+resource "aws_secretsmanager_secret" "n8n_credentials" {
+  name        = "${var.environment}/aws-coach/n8n"
+  description = "n8n credentials"
   
-  filter {
-    name   = "name"
-    values = ["al2023-ami-*-x86_64"]
-  }
-}
-
-resource "aws_instance" "n8n" {
-  ami           = data.aws_ami.amazon_linux_2023.id
-  instance_type = var.n8n_instance_type
-  
-  subnet_id              = aws_subnet.public_a.id
-  vpc_security_group_ids = [aws_security_group.n8n.id]
-  key_name              = var.ssh_key_name
-  
-  user_data = <<-EOF
-              #!/bin/bash
-              # Install Node.js
-              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-              export NVM_DIR="$HOME/.nvm"
-              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-              nvm install 18
-              nvm use 18
-              
-              # Install n8n
-              npm install -g n8n
-              
-              # Create systemd service
-              cat > /etc/systemd/system/n8n.service <<SERVICE
-              [Unit]
-              Description=n8n Workflow Automation
-              After=network.target
-              
-              [Service]
-              Type=simple
-              User=ec2-user
-              Environment="N8N_BASIC_AUTH_ACTIVE=true"
-              Environment="N8N_BASIC_AUTH_USER=${var.n8n_username}"
-              Environment="N8N_BASIC_AUTH_PASSWORD=${var.n8n_password}"
-              Environment="N8N_HOST=0.0.0.0"
-              Environment="N8N_PORT=5678"
-              ExecStart=/home/ec2-user/.nvm/versions/node/v18.*/bin/n8n
-              Restart=always
-              
-              [Install]
-              WantedBy=multi-user.target
-              SERVICE
-              
-              systemctl daemon-reload
-              systemctl enable n8n
-              systemctl start n8n
-              EOF
-  
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
-    encrypted   = true
-  }
+  recovery_window_in_days = 7  # Minimum recovery window
   
   tags = {
-    Name = "aws-coach-n8n"
+    Name = "aws-coach-n8n-credentials"
   }
 }
 
-resource "aws_eip" "n8n" {
-  instance = aws_instance.n8n.id
-  domain   = "vpc"
-  
-  tags = {
-    Name = "aws-coach-n8n-eip"
-  }
-}
-
-# ============================================
-# SECRETS MANAGER
-# ============================================
-
-resource "aws_secretsmanager_secret" "db_credentials" {
-  name        = "${var.environment}/aws-coach/db"
-  description = "Database credentials for AWS Certifications Coach"
-  
-  recovery_window_in_days = 30
-}
-
-resource "aws_secretsmanager_secret_version" "db_credentials" {
-  secret_id = aws_secretsmanager_secret.db_credentials.id
+resource "aws_secretsmanager_secret_version" "n8n_credentials" {
+  secret_id = aws_secretsmanager_secret.n8n_credentials.id
   
   secret_string = jsonencode({
-    username = aws_db_instance.postgres.username
-    password = var.db_password
-    host     = aws_db_instance.postgres.address
-    port     = aws_db_instance.postgres.port
-    dbname   = aws_db_instance.postgres.db_name
+    username = var.n8n_username
+    password = var.n8n_password
+    url      = "https://${aws_eip.n8n.public_ip}:5678"
   })
-}
-
-# ============================================
-# CLOUDWATCH LOG GROUP
-# ============================================
-
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/aws/certifications-coach"
-  retention_in_days = 30
-  
-  tags = {
-    Name = "aws-coach-logs"
-  }
 }
 
 # ============================================
 # OUTPUTS
 # ============================================
 
-output "rds_endpoint" {
-  description = "RDS PostgreSQL endpoint"
-  value       = aws_db_instance.postgres.address
-}
-
 output "n8n_public_ip" {
   description = "N8N instance public IP"
   value       = aws_eip.n8n.public_ip
+}
+
+output "n8n_url" {
+  description = "N8N access URL"
+  value       = "http://${aws_eip.n8n.public_ip}:5678"
 }
 
 output "s3_backup_bucket" {
@@ -462,8 +304,27 @@ output "s3_backup_bucket" {
   value       = aws_s3_bucket.backups.id
 }
 
-output "vpc_id" {
-  description = "VPC ID"
-  value       = aws_vpc.main.id
+output "deployment_info" {
+  description = "Deployment information"
+  value = <<-EOT
+  
+  ✅ AWS Free Tier Deployment Complete!
+  
+  n8n URL: http://${aws_eip.n8n.public_ip}:5678
+  n8n Username: ${var.n8n_username}
+  n8n Password: ${var.n8n_password}
+  
+  S3 Backup Bucket: ${aws_s3_bucket.backups.id}
+  
+  SSH Command: ssh -i ${var.ssh_key_name}.pem ec2-user@${aws_eip.n8n.public_ip}
+  
+  Next Steps:
+  1. Access n8n at the URL above
+  2. Import workflow.json
+  3. Configure Snowflake connection in backend
+  4. Deploy backend to AWS Elastic Beanstalk (Free Tier: 750 hours/month)
+  5. Deploy frontend to Streamlit Cloud (Free)
+  
+  💰 Estimated Monthly Cost: $0 (within Free Tier limits)
+  EOT
 }
-
