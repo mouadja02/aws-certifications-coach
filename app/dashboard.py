@@ -2,8 +2,11 @@
 
 import streamlit as st
 import time
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
 
-from app.database import get_user_by_email, save_chat_message
+from database import get_user_by_email, save_chat_message
 
 def get_user_from_db(email: str):
     """Fetch user data from Snowflake"""

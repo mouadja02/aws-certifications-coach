@@ -8,8 +8,12 @@ import streamlit as st
 from pathlib import Path
 import logging
 
-from app.dashboard import show_dashboard
-from app.utils import register_user, login_user
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
+from dashboard import show_dashboard
+from utils import register_user, login_user
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
