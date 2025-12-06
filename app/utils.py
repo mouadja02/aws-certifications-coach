@@ -4,13 +4,17 @@ Handles user authentication and registration with Snowflake
 """
 
 import streamlit as st
-from app.database import (
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
+from database import (
     check_if_user_exists,
     insert_user,
     get_user_by_email,
     update_last_login
 )
-from app.auth import get_password_hash, verify_password
+from auth import get_password_hash, verify_password
 import logging
 
 logger = logging.getLogger(__name__)
