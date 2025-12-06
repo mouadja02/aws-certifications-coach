@@ -6,12 +6,10 @@ Enhanced with production security and error handling
 
 import streamlit as st
 from pathlib import Path
-import requests
-import os
 import logging
 
-from dashboard import show_dashboard
-from utils import register_user, login_user
+from app.dashboard import show_dashboard
+from app.utils import register_user, login_user
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,12 +23,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Get Backend URL from Streamlit secrets or environment
-try:
-    BACKEND_URL = st.secrets.get("BACKEND_URL", os.getenv("BACKEND_URL", "http://localhost:8000"))
-except Exception:
-    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-    logger.warning("Could not access Streamlit secrets, using environment variable")
+# No backend API needed - using Snowflake directly
 
 # Custom CSS for styling
 st.markdown("""
@@ -72,14 +65,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-def check_backend_health():
-    """Check if backend API is accessible"""
-    try:
-        response = requests.get(f"{BACKEND_URL}/health", timeout=5)
-        return response.status_code == 200
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Backend health check failed: {e}")
-        return False
+# Using Snowflake directly - no backend health check needed
 
 def show_home_page():
     """Display the home page"""
@@ -94,10 +80,6 @@ def show_home_page():
     # Header
     st.markdown('<h1 class="main-header">AWS Certifications Coach</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Master AWS Certifications with AI-Powered Learning</p>', unsafe_allow_html=True)
-    
-    # Backend health check (show warning if down)
-    if not check_backend_health():
-        st.warning("⚠️ Backend service is currently unavailable. Some features may not work properly.")
     
     # Add some spacing
     st.write("")
@@ -197,11 +179,6 @@ def show_login_page():
                             st.rerun()
                         else:
                             logger.warning(f"Failed login attempt: {email}")
-                            st.error("❌ Invalid email or password")
-                except requests.exceptions.Timeout:
-                    st.error("❌ Connection timeout. Please try again.")
-                except requests.exceptions.ConnectionError:
-                    st.error("❌ Cannot connect to server. Please try again later.")
                 except Exception as e:
                     logger.error(f"Login error: {e}")
                     st.error("❌ An unexpected error occurred. Please try again.")
@@ -279,10 +256,6 @@ def show_register_page():
                                 time.sleep(2)
                                 st.session_state.page = "login"
                                 st.rerun()
-                    except requests.exceptions.Timeout:
-                        st.error("❌ Connection timeout. Please try again.")
-                    except requests.exceptions.ConnectionError:
-                        st.error("❌ Cannot connect to server. Please try again later.")
                     except Exception as e:
                         logger.error(f"Registration error: {e}")
                         st.error("❌ An unexpected error occurred. Please try again.")

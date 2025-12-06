@@ -1,24 +1,24 @@
 # User Dashboard (after successful login)
 
 import streamlit as st
-import sys
-import os
-import requests
 import time
-import json
 
-# Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+from app.database import get_user_by_email, save_chat_message
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
-
-def get_user_from_api(email: str):
-    """Fetch user data from the backend API"""
+def get_user_from_db(email: str):
+    """Fetch user data from Snowflake"""
     try:
-        response = requests.get(f"{BACKEND_URL}/api/user/{email}")
-        if response.status_code == 200:
-            return response.json()
-    except requests.exceptions.RequestException as e:
+        user = get_user_by_email(email)
+        if user:
+            # Convert Snowflake column names to lowercase for compatibility
+            return {
+                'id': user['ID'],
+                'name': user['NAME'],
+                'email': user['EMAIL'],
+                'age': user['AGE'],
+                'target_certification': user['TARGET_CERTIFICATION']
+            }
+    except Exception as e:
         st.error(f"Error fetching user data: {e}")
     return None
 
@@ -66,7 +66,7 @@ def show_dashboard():
     # --- Main Content ---
     st.markdown('<h1 class="main-header">Dashboard</h1>', unsafe_allow_html=True)
     
-    user = get_user_from_api(st.session_state.user_email)
+    user = get_user_from_db(st.session_state.user_email)
     
     if not user:
         st.error("Could not load user profile. Please try logging in again.")
@@ -129,26 +129,34 @@ def show_dashboard():
 
         with st.chat_message("assistant"):
             with st.spinner("🧠 Thinking..."):
-                # Call backend API
+                # Generate AI response (using fallback for now)
+                # TODO: Integrate with n8n webhooks for AI responses
                 try:
-                    response = requests.post(
-                        f"{BACKEND_URL}/api/chat",
-                        json={
-                            "user_id": user["id"],
-                            "question": prompt,
-                            "context": user.get("target_certification", "")
-                        },
-                        timeout=30
-                    )
+                    response_text = f"""Thank you for your question about {user.get('target_certification', 'AWS certifications')}!
                     
-                    if response.status_code == 200:
-                        data = response.json()
-                        response_text = data.get("answer", "Sorry, I couldn't generate a response.")
-                    else:
-                        response_text = "Sorry, there was an error processing your question. Please try again."
-                except requests.exceptions.RequestException as e:
-                    print(f"Error calling backend: {e}")
-                    response_text = "Sorry, I'm having trouble connecting to the AI service. Please try again later."
+I'm here to help you prepare for your AWS certification. While the AI service is being configured, here are some general tips:
+
+1. **Understand the Exam Blueprint**: Review the official AWS exam guide for your target certification
+2. **Hands-on Practice**: Use AWS Free Tier to gain practical experience
+3. **Study Resources**: 
+   - AWS Official Documentation
+   - AWS Training and Certification portal
+   - Practice exams
+4. **Focus Areas**: 
+   - Core AWS services (EC2, S3, VPC, IAM)
+   - Best practices and architecture patterns
+   - Security and compliance
+   - Cost optimization
+
+Your question: "{prompt}"
+
+For detailed AI-powered answers, please ensure the n8n workflow is configured and active."""
+                    
+                    # Save to Snowflake
+                    save_chat_message(user["id"], prompt, response_text)
+                except Exception as e:
+                    print(f"Error generating response: {e}")
+                    response_text = "Sorry, I'm having trouble processing your question. Please try again later."
 
                 full_response = ""
                 message_placeholder = st.empty()
