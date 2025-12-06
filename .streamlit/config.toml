@@ -22,5 +22,4 @@ toolbarMode = "minimal"
 
 [runner]
 magicEnabled = true
-fixMatplotlib = true
 
