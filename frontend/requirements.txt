@@ -10,14 +10,19 @@ streamlit==1.29.0
 # SNOWFLAKE CONNECTOR (Native integration with Streamlit)
 # ============================================
 snowflake-connector-python==3.6.0
-snowflake-snowpark-python==1.11.1  # For advanced Snowflake operations
+snowflake-snowpark-python==1.11.1
 
 # ============================================
-# HTTP CLIENT & API COMMUNICATION
+# AUTHENTICATION
+# ============================================
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
+# ============================================
+# HTTP CLIENT (for n8n integration)
 # ============================================
 requests==2.31.0
 urllib3==2.1.0
-httpx==0.26.0
 
 # ============================================
 # DATA MANIPULATION
@@ -42,9 +47,3 @@ altair==5.2.0
 # SECURITY & VALIDATION
 # ============================================
 validators==0.22.0
-bleach==6.1.0
-
-# ============================================
-# MONITORING
-# ============================================
-sentry-sdk==1.39.2
