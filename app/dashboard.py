@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
-from database import get_user_by_email, save_chat_message
+from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log
 from ai_service import AIService
 
 def get_user_from_db(email: str):
@@ -417,67 +417,92 @@ def show_qna_knowledge_base(user):
                 if st.button("👎 Not Helpful", key=f"not_helpful_{i}"):
                     st.info("We'll improve this answer!")
 
-
 def show_progress_dashboard(user):
     """Progress Dashboard - Analytics and tracking"""
-    st.header("📊 Progress Dashboard")
-    st.markdown(f"Track your progress for **{user['target_certification']}**")
-    
-    # Key metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Study Days", "15", "3")
-    col2.metric("Total Study Time", "28h", "4h")
-    col3.metric("Practice Exams", "12", "2")
-    col4.metric("Avg Score", "82%", "7%")
-    
-    st.write("---")
-    
-    # Progress bars
-    st.subheader("📈 Topic Progress")
-    topics = [
-        ("Storage (S3, EBS, EFS)", 85),
-        ("Compute (EC2, Lambda)", 72),
-        ("Networking (VPC, Route53)", 65),
-        ("Security (IAM, KMS)", 78),
-        ("Database (RDS, DynamoDB)", 60),
-    ]
-    
-    for topic, progress in topics:
-        st.write(f"**{topic}**")
-        st.progress(progress / 100)
-        st.caption(f"{progress}% complete")
-        st.write("")
-    
-    st.write("---")
-    
-    # Study streak
-    st.subheader("🔥 Study Streak")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Current Streak", "7 days")
-        st.metric("Longest Streak", "15 days")
-    with col2:
-        st.metric("Total XP", "2,450")
-        st.metric("Level", "5")
-    
+    progress_data = get_user_progress(user["id"])
+    activity_data = get_activity_log(user["id"])
+
+    if progress_data:
+        study_time_minutes = progress_data["STUDY_TIME_MINUTES"]/60
+        practice_tests_taken = progress_data["PRACTICE_TESTS_TAKEN"]
+        average_score = progress_data["AVERAGE_SCORE"]
+        storage_topic_progress = progress_data["STORAGE_TOPIC_PROGRESS"]
+        compute_topic_progress = progress_data["COMPUTE_TOPIC_PROGRESS"]
+        networking_topic_progress = progress_data["NETWORKING_TOPIC_PROGRESS"]
+        security_topic_progress = progress_data["SECURITY_TOPIC_PROGRESS"]
+        database_topic_progress = progress_data["DATABASE_TOPIC_PROGRESS"]
+        last_activity = progress_data["LAST_ACTIVITY"]
+        streak = progress_data["STREAK"]
+        longest_streak = progress_data["LONGEST_STREAK"]
+        xp = progress_data["XP"]
+        accuracy_percentage = progress_data["ACCURACY_PERCENTAGE"]
+        
+        st.header("📊 Progress Dashboard")
+        st.markdown(f"Track your progress for **{user['target_certification']}**")
+        
+        # Key metrics
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Study Time", f"{study_time_minutes} minutes")
+        col2.metric("Practice Exams", practice_tests_taken)
+        col3.metric("Avg Score", f"{average_score}%")
+        col4.metric("Correct Answers Percentage", f"{accuracy_percentage}%")
+        
+        st.write("---")
+        
+        # Progress bars
+        st.subheader("📈 Topic Progress")
+        topics = [
+            ("Storage (S3, EBS, EFS)", storage_topic_progress),
+            ("Compute (EC2, Lambda)", compute_topic_progress),
+            ("Networking (VPC, Route53)", networking_topic_progress),
+            ("Security (IAM, KMS)", security_topic_progress),
+            ("Database (RDS, DynamoDB)", database_topic_progress),
+        ]
+        
+        for topic, progress in topics:
+            st.write(f"**{topic}**")
+            st.progress(progress / 100)
+            st.caption(f"{progress}% complete")
+            st.write("")
+        
+        st.write("---")
+        
+        # Study streak
+        st.subheader("🔥 Study Streak")
+        col1 = st.columns(1)
+        with col1:
+            st.metric("Current Streak", f"{streak} days")
+            st.metric("Longest Streak", f"{longest_streak} days")
+            st.metric("Total XP", f"{xp}")
+    else:
+        st.info("No progress data found")
+
+    if activity_data:
+        # Get last 3 activities and descriptions
+        last_activities = activity_data[-3:]["activity"]
+        last_descriptions = activity_data[-3:]["description"]
+    else:
+        last_activities = None
+        last_descriptions = None
+
     # Recent activity
     st.write("---")
     st.subheader("📝 Recent Activity")
-    activities = [
-        {"type": "exam", "desc": "Completed practice exam #12", "score": "85%", "time": "2 hours ago"},
-        {"type": "chat", "desc": "Asked 5 questions about S3", "time": "5 hours ago"},
-        {"type": "tricks", "desc": "Learned mnemonics for EC2 types", "time": "1 day ago"},
-    ]
     
-    for activity in activities:
-        icon = {"exam": "📝", "chat": "💬", "tricks": "🧠"}.get(activity["type"], "📌")
-        st.write(f"{icon} **{activity['desc']}**")
-        if activity.get("score"):
-            st.caption(f"Score: {activity['score']} • {activity['time']}")
-        else:
-            st.caption(activity['time'])
-        st.write("")
-
+    if last_activities and last_descriptions:
+        activities = [
+            {"type": last_activities[0], "desc": last_descriptions[0], "time": "2 hours ago"},
+            {"type": last_activities[1], "desc": last_descriptions[1], "time": "5 hours ago"},
+            {"type": last_activities[2], "desc": last_descriptions[2], "time": "1 day ago"},
+        ]
+        
+        for activity in activities:
+            icon = {"exam": "📝", "chat": "💬", "tricks": "🧠"}.get(activity["type"], "📌")
+            st.write(f"{icon} **{activity['desc']}**")
+            st.caption(f"{activity['time']}")
+            st.write("")
+    else:
+        st.info("No recent activity found")
 
 def show_dashboard():
     """Main Dashboard with Multi-Section Navigation"""
@@ -518,17 +543,9 @@ def show_dashboard():
         st.caption(f"🎯 {user['target_certification']}")
         st.write("---")
         
-        # Navigation menu
-        section = st.radio(
-            "📚 Learning Sections:",
-            [
-                "🏠 Progress Dashboard",
-                "🤖 AI Study Coach",
-                "📝 Practice Exams",
-                "🧠 Study Tricks",
-                "✍️ Answer Evaluation",
-                "❓ Q&A Knowledge Base"
-            ],
+        # Horizental Navigation menu
+        section = st.tabs(
+            ["🏠 Progress Dashboard", "🤖 AI Study Coach", "📝 Practice Exams", "🧠 Study Tricks", "✍️ Answer Evaluation", "❓ Q&A Knowledge Base"],
             key="navigation"
         )
         

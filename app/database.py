@@ -227,6 +227,52 @@ def get_user_progress(user_id: int):
         logger.error(f"Error retrieving user progress: {e}")
         return None
 
+def get_topic_progress(user_id: int):
+    """Get topic progress data"""
+    try:
+        conn = get_snowflake_connection()
+        if conn is None:
+            return None
+        
+        session = conn.session()
+        query = f"""
+        SELECT * FROM topic_progress WHERE user_id = {user_id}
+        """
+        
+        result = session.sql(query).collect()
+        
+        if result and len(result) > 0:
+            row = result[0]
+            return {
+                'USER_ID': row['USER_ID'],
+                'TOPIC': row['TOPIC'],
+                'PROGRESS_PERCENTAGE': row['PROGRESS_PERCENTAGE'],
+                'UPDATED_AT': row['UPDATED_AT']
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Error retrieving topic progress: {e}")
+
+def get_activity_log(user_id: int):
+    """Get activity log data"""
+    try:
+        conn = get_snowflake_connection()
+        if conn is None:
+            return None
+        
+        session = conn.session()
+        query = f"""
+        SELECT * FROM activity_log WHERE user_id = {user_id} LIMIT 3"""
+        
+        result = session.sql(query).collect()
+        
+        if result and len(result) > 0:
+            return result
+        return None
+    except Exception as e:
+        logger.error(f"Error retrieving activity log: {e}")
+        return None
+
 # ============================================
 # CHAT HISTORY OPERATIONS
 # ============================================

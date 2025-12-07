@@ -85,7 +85,7 @@ backups/
 *.bak
 
 # Streamlit
-.streamlit/secrets.toml
+app/.streamlit/secrets.toml
 
 # Node (for n8n)
 node_modules/
