@@ -33,3 +33,5 @@ pandas==2.1.4
 # ============================================
 python-dotenv==1.0.0
 pytz==2023.3.post1
+
+streamlit-option-menu
