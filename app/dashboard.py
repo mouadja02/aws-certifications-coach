@@ -9,6 +9,7 @@ import sys
 import os
 import json
 from datetime import datetime
+from streamlit_option_menu import option_menu
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log
@@ -423,19 +424,18 @@ def show_progress_dashboard(user):
     activity_data = get_activity_log(user["id"])
 
     if progress_data:
-        study_time_minutes = progress_data["STUDY_TIME_MINUTES"]/60
-        practice_tests_taken = progress_data["PRACTICE_TESTS_TAKEN"]
-        average_score = progress_data["AVERAGE_SCORE"]
-        storage_topic_progress = progress_data["STORAGE_TOPIC_PROGRESS"]
-        compute_topic_progress = progress_data["COMPUTE_TOPIC_PROGRESS"]
-        networking_topic_progress = progress_data["NETWORKING_TOPIC_PROGRESS"]
-        security_topic_progress = progress_data["SECURITY_TOPIC_PROGRESS"]
-        database_topic_progress = progress_data["DATABASE_TOPIC_PROGRESS"]
-        last_activity = progress_data["LAST_ACTIVITY"]
-        streak = progress_data["STREAK"]
-        longest_streak = progress_data["LONGEST_STREAK"]
-        xp = progress_data["XP"]
-        accuracy_percentage = progress_data["ACCURACY_PERCENTAGE"]
+        study_time_minutes = progress_data.get("STUDY_TIME_MINUTES", 0) / 60
+        practice_tests_taken = progress_data.get("PRACTICE_TESTS_TAKEN", 0)
+        average_score = progress_data.get("AVERAGE_SCORE", 0)
+        storage_topic_progress = progress_data.get("STORAGE_TOPIC_PROGRESS", 0)
+        compute_topic_progress = progress_data.get("COMPUTE_TOPIC_PROGRESS", 0)
+        networking_topic_progress = progress_data.get("NETWORKING_TOPIC_PROGRESS", 0)
+        security_topic_progress = progress_data.get("SECURITY_TOPIC_PROGRESS", 0)
+        database_topic_progress = progress_data.get("DATABASE_TOPIC_PROGRESS", 0)
+        streak = progress_data.get("STREAK", 0)
+        longest_streak = progress_data.get("LONGEST_STREAK", 0)
+        xp = progress_data.get("XP", 0)
+        accuracy_percentage = progress_data.get("ACCURACY_PERCENTAGE", 0)
         
         st.header("📊 Progress Dashboard")
         st.markdown(f"Track your progress for **{user['target_certification']}**")
@@ -469,21 +469,20 @@ def show_progress_dashboard(user):
         
         # Study streak
         st.subheader("🔥 Study Streak")
-        col1 = st.columns(1)
-        with col1:
-            st.metric("Current Streak", f"{streak} days")
-            st.metric("Longest Streak", f"{longest_streak} days")
-            st.metric("Total XP", f"{xp}")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Current Streak", f"{streak} days")
+        col2.metric("Longest Streak", f"{longest_streak} days")
+        col3.metric("Total XP", f"{xp}")
     else:
         st.info("No progress data found")
 
     if activity_data:
         # Get last 3 activities and descriptions
-        last_activities = activity_data[-3:]["activity"]
-        last_descriptions = activity_data[-3:]["description"]
+        last_activities = [row['ACTIVITY'] for row in activity_data]
+        last_descriptions = [row['DESCRIPTION'] for row in activity_data]
     else:
-        last_activities = None
-        last_descriptions = None
+        last_activities = []
+        last_descriptions = []
 
     # Recent activity
     st.write("---")
@@ -544,9 +543,11 @@ def show_dashboard():
         st.write("---")
         
         # Horizental Navigation menu
-        section = st.tabs(
-            ["🏠 Progress Dashboard", "🤖 AI Study Coach", "📝 Practice Exams", "🧠 Study Tricks", "✍️ Answer Evaluation", "❓ Q&A Knowledge Base"],
-            key="navigation"
+        section = option_menu(
+            menu_title=None,
+            options=["Progress Dashboard", "AI Study Coach", "Practice Exams", "Study Tricks", "Answer Evaluation", "Q&A Knowledge Base"],
+            icons=["house", "robot", "pencil-square", "lightbulb", "check2-square", "question-circle"],
+            orientation="horizontal"
         )
         
         st.write("---")
@@ -558,15 +559,15 @@ def show_dashboard():
             st.rerun()
     
     # Display selected section
-    if "Progress Dashboard" in section:
+    if section == "Progress Dashboard":
         show_progress_dashboard(user)
-    elif "AI Study Coach" in section:
+    elif section == "AI Study Coach":
         show_ai_chat(user)
-    elif "Practice Exams" in section:
+    elif section == "Practice Exams":
         show_practice_exam(user)
-    elif "Study Tricks" in section:
+    elif section == "Study Tricks":
         show_study_tricks(user)
-    elif "Answer Evaluation" in section:
+    elif section == "Answer Evaluation":
         show_answer_evaluation(user)
-    elif "Q&A Knowledge Base" in section:
+    elif section == "Q&A Knowledge Base":
         show_qna_knowledge_base(user)

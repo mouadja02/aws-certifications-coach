@@ -126,7 +126,7 @@ def get_user_by_email(email: str):
         session = conn.session()
         query = f"""
         SELECT id, name, email, password, age, target_certification, 
-               created_at, updated_at, last_login
+               created_at, updated_at
         FROM logged_users 
         WHERE email = '{email}' AND is_active = 1
         """
@@ -143,8 +143,7 @@ def get_user_by_email(email: str):
                 'AGE': row['AGE'],
                 'TARGET_CERTIFICATION': row['TARGET_CERTIFICATION'],
                 'CREATED_AT': row['CREATED_AT'],
-                'UPDATED_AT': row['UPDATED_AT'],
-                'LAST_LOGIN': row['LAST_LOGIN']
+                'UPDATED_AT': row['UPDATED_AT']
             }
         return None
     except Exception as e:
@@ -185,9 +184,8 @@ def create_user_progress(user_id: int):
         session = conn.session()
         query = f"""
         INSERT INTO user_progress 
-        (user_id, study_time_minutes, practice_tests_taken, average_score, 
-         progress_percentage, last_activity, updated_at)
-        VALUES ({user_id}, 0, 0, 0, 0, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())
+        (user_id)
+        VALUES ({user_id})
         """
         
         session.sql(query).collect()
@@ -213,15 +211,7 @@ def get_user_progress(user_id: int):
         
         if result and len(result) > 0:
             row = result[0]
-            return {
-                'USER_ID': row['USER_ID'],
-                'STUDY_TIME_MINUTES': row['STUDY_TIME_MINUTES'],
-                'PRACTICE_TESTS_TAKEN': row['PRACTICE_TESTS_TAKEN'],
-                'AVERAGE_SCORE': row['AVERAGE_SCORE'],
-                'PROGRESS_PERCENTAGE': row['PROGRESS_PERCENTAGE'],
-                'LAST_ACTIVITY': row['LAST_ACTIVITY'],
-                'UPDATED_AT': row['UPDATED_AT']
-            }
+            return row.as_dict()
         return None
     except Exception as e:
         logger.error(f"Error retrieving user progress: {e}")

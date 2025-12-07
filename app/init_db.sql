@@ -1,13 +1,11 @@
 -- Database initialization script for AWS Certifications Coach
 -- This script creates the initial database schema for Snowflake
 
--- Create database
 CREATE DATABASE AWS_CERTIFICATIONS;
 
 -- Use the database
 USE DATABASE AWS_CERTIFICATIONS;
 USE SCHEMA PUBLIC;
-
 
 -- Create logged_users table
 CREATE OR REPLACE TABLE logged_users (
@@ -17,9 +15,12 @@ CREATE OR REPLACE TABLE logged_users (
     target_certification VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN,
+    last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
 
 -- Create chat_history table
 CREATE OR REPLACE TABLE chat_history (
@@ -43,7 +44,6 @@ CREATE  OR REPLACE TABLE user_progress (
     networking_topic_progress INTEGER DEFAULT 0,
     security_topic_progress INTEGER DEFAULT 0,
     database_topic_progress INTEGER DEFAULT 0,
-    last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     streak INTEGER DEFAULT 0,
     longest_streak INTEGER DEFAULT 0,
     xp INTEGER DEFAULT 0,
