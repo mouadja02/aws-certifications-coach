@@ -8,6 +8,7 @@ import requests
 from typing import Optional, Dict, Any
 from datetime import datetime
 import json
+import streamlit as st
 
 class AIService:
     """
@@ -16,11 +17,11 @@ class AIService:
     """
     
     def __init__(self):
-        # n8n webhook URLs from environment variables
-        self.chat_webhook = os.getenv("N8N_CHAT_WEBHOOK_URL")
-        self.exam_webhook = os.getenv("N8N_EXAM_WEBHOOK_URL")
-        self.tricks_webhook = os.getenv("N8N_TRICKS_WEBHOOK_URL")
-        self.evaluation_webhook = os.getenv("N8N_EVALUATION_WEBHOOK_URL")
+        # n8n webhook URLs from Streamlit secrets or environment variables
+        self.chat_webhook = st.secrets.get("N8N_CHAT_WEBHOOK_URL", os.getenv("N8N_CHAT_WEBHOOK_URL"))
+        self.exam_webhook = st.secrets.get("N8N_EXAM_WEBHOOK_URL", os.getenv("N8N_EXAM_WEBHOOK_URL"))
+        self.tricks_webhook = st.secrets.get("N8N_TRICKS_WEBHOOK_URL", os.getenv("N8N_TRICKS_WEBHOOK_URL"))
+        self.evaluation_webhook = st.secrets.get("N8N_EVALUATION_WEBHOOK_URL", os.getenv("N8N_EVALUATION_WEBHOOK_URL"))
         
         # Fallback mode if no webhooks configured
         self.use_fallback = not self.chat_webhook
