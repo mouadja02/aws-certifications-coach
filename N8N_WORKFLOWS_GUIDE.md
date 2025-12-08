@@ -9,7 +9,6 @@ Complete guide to build all n8n workflows for your learning platform.
 3. [Study Tricks & Mnemonics](#3-study-tricks--mnemonics)
 4. [Answer Evaluation](#4-answer-evaluation)
 5. [Q&A Knowledge Base](#5-qa-knowledge-base)
-
 ---
 
 ## 1. AI Study Coach (Chat)
