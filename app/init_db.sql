@@ -66,3 +66,24 @@ CREATE  OR REPLACE TABLE activity_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES logged_users(id)
 );
+
+-- Exam sessions table for practice exam tracking
+CREATE OR REPLACE TABLE exam_sessions (
+    id INTEGER AUTOINCREMENT PRIMARY KEY,
+    session_id VARCHAR(255) UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    certification VARCHAR(255) NOT NULL,
+    difficulty VARCHAR(50) NOT NULL,
+    topic VARCHAR(255) NOT NULL,
+    total_questions INTEGER NOT NULL,
+    correct_answers INTEGER NOT NULL,
+    incorrect_answers INTEGER NOT NULL,
+    percentage FLOAT NOT NULL,
+    passed BOOLEAN NOT NULL,
+    started_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    answer_breakdown VARIANT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES logged_users(id)
+);
