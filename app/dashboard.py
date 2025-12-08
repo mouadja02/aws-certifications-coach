@@ -95,95 +95,309 @@ def show_ai_chat(user):
 
 
 def show_practice_exam(user):
-    """Practice Exam Section - Generate and take exams"""
+    """Practice Exam Section - Interactive exam with AI-generated questions"""
     st.header("📝 Practice Exams")
-    st.markdown(f"Practice for **{user['target_certification']}**")
+    st.markdown(f"Practice for **{user['target_certification']}** - AWS Official Exam Style")
     
-    # Exam settings
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        num_questions = st.selectbox("Number of Questions", [5, 10, 15, 20, 30], index=1)
-    with col2:
-        difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1)
-    with col3:
-        topic = st.selectbox("Topic", ["All Topics", "EC2", "S3", "VPC", "IAM", "Lambda", "RDS", "CloudFormation"])
+    # Initialize session state variables
+    if "exam_session_id" not in st.session_state:
+        st.session_state.exam_session_id = None
+    if "current_question" not in st.session_state:
+        st.session_state.current_question = None
+    if "question_number" not in st.session_state:
+        st.session_state.question_number = 0
+    if "total_questions" not in st.session_state:
+        st.session_state.total_questions = 10
+    if "exam_score" not in st.session_state:
+        st.session_state.exam_score = 0
+    if "exam_results" not in st.session_state:
+        st.session_state.exam_results = []
+    if "show_explanation" not in st.session_state:
+        st.session_state.show_explanation = False
+    if "current_answer_result" not in st.session_state:
+        st.session_state.current_answer_result = None
     
-    if st.button("🚀 Generate New Exam", use_container_width=True):
-        with st.spinner("🔄 Generating your practice exam..."):
-            ai_service = AIService()
-            try:
-                exam_data = ai_service.generate_exam_practice(
-                    user["id"],
-                    user["target_certification"],
-                    difficulty=difficulty.lower(),
-                    num_questions=num_questions
-                )
-                st.session_state.current_exam = exam_data
-                st.session_state.exam_answers = {}
-                st.session_state.exam_submitted = False
-                st.success("✅ Exam generated! Start answering below.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error generating exam: {e}")
-    
-    # Display current exam
-    if "current_exam" in st.session_state and st.session_state.current_exam:
-        exam = st.session_state.current_exam
+    # If no exam session is active, show exam setup
+    if st.session_state.exam_session_id is None:
+        st.info("👇 Configure your practice exam settings and click 'Start Exam' to begin")
         
-        if not st.session_state.get("exam_submitted", False):
-            # Show questions
-            st.write("---")
-            for i, question in enumerate(exam.get("questions", []), 1):
-                st.subheader(f"Question {i}")
-                st.write(question.get("question", ""))
+        # Exam settings
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            num_questions = st.selectbox("Number of Questions", [5, 10, 15, 20, 30], index=1, key="num_q")
+        with col2:
+            difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1, key="diff")
+        with col3:
+            topic = st.selectbox("Topic", ["All Topics", "EC2", "S3", "VPC", "IAM", "Lambda", "RDS", "CloudFormation", "CloudWatch"], key="topic")
+        
+        st.write("---")
+        
+        if st.button("🚀 Start Exam", type="primary", use_container_width=True):
+            with st.spinner("🔄 Starting your practice exam..."):
+                ai_service = AIService()
+                try:
+                    # Start exam session and get first question
+                    session_data = ai_service.start_exam_session(
+                        user["id"],
+                        user["target_certification"],
+                        difficulty=difficulty.lower(),
+                        total_questions=num_questions,
+                        topic=topic
+                    )
+                    
+                    if "error" not in session_data:
+                        st.session_state.exam_session_id = session_data.get("session_id")
+                        st.session_state.current_question = session_data
+                        st.session_state.question_number = session_data.get("question_number", 1)
+                        st.session_state.total_questions = num_questions
+                        st.session_state.exam_score = 0
+                        st.session_state.exam_results = []
+                        st.session_state.show_explanation = False
+                        st.session_state.current_answer_result = None
+                        st.success("✅ Exam started!")
+                        st.rerun()
+                    else:
+                        st.error(f"Error starting exam: {session_data.get('error')}")
+                except Exception as e:
+                    st.error(f"Error starting exam: {e}")
+    
+    # If exam session is active, show current question
+    else:
+        # Progress bar
+        progress = st.session_state.question_number / st.session_state.total_questions
+        st.progress(progress)
+        st.caption(f"Question {st.session_state.question_number} of {st.session_state.total_questions}")
+        
+        st.write("---")
+        
+        # Display current question
+        if st.session_state.current_question:
+            question_data = st.session_state.current_question
+            
+            # Question text
+            st.subheader(f"Question {st.session_state.question_number}")
+            st.write(question_data.get("question", ""))
+            st.write("")
+            
+            # Determine if multiple choice or single choice
+            question_type = question_data.get("type", "single")
+            options = question_data.get("options", [])
+            
+            # If not showing explanation, show answer options
+            if not st.session_state.show_explanation:
+                if question_type == "multiple":
+                    st.info("ℹ️ Select ALL that apply (multiple correct answers)")
+                    user_answers = []
+                    for option in options:
+                        if st.checkbox(option, key=f"option_{option}"):
+                            user_answers.append(option)
+                    
+                    st.write("")
+                    col1, col2 = st.columns([3, 1])
+                    with col2:
+                        if st.button("✅ Check Answer", type="primary", use_container_width=True, disabled=len(user_answers) == 0):
+                            # Check answer with AI
+                            with st.spinner("🤔 Checking your answer..."):
+                                ai_service = AIService()
+                                try:
+                                    result = ai_service.check_exam_answer(
+                                        user["id"],
+                                        st.session_state.exam_session_id,
+                                        question_data.get("question_id"),
+                                        user_answers,
+                                        question_data.get("question")
+                                    )
+                                    st.session_state.current_answer_result = result
+                                    st.session_state.show_explanation = True
+                                    
+                                    # Update score
+                                    if result.get("is_correct", False):
+                                        st.session_state.exam_score += 1
+                                    
+                                    # Save result
+                                    st.session_state.exam_results.append({
+                                        "question": question_data.get("question"),
+                                        "user_answer": user_answers,
+                                        "correct_answer": result.get("correct_answer"),
+                                        "is_correct": result.get("is_correct", False),
+                                        "explanation": result.get("explanation", "")
+                                    })
+                                    
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error checking answer: {e}")
+                else:
+                    # Single choice question
+                    user_answer = st.radio(
+                        "Select your answer:",
+                        options,
+                        key="single_answer",
+                        index=None
+                    )
+                    
+                    st.write("")
+                    col1, col2 = st.columns([3, 1])
+                    with col2:
+                        if st.button("✅ Check Answer", type="primary", use_container_width=True, disabled=user_answer is None):
+                            # Check answer with AI
+                            with st.spinner("🤔 Checking your answer..."):
+                                ai_service = AIService()
+                                try:
+                                    result = ai_service.check_exam_answer(
+                                        user["id"],
+                                        st.session_state.exam_session_id,
+                                        question_data.get("question_id"),
+                                        user_answer,
+                                        question_data.get("question")
+                                    )
+                                    st.session_state.current_answer_result = result
+                                    st.session_state.show_explanation = True
+                                    
+                                    # Update score
+                                    if result.get("is_correct", False):
+                                        st.session_state.exam_score += 1
+                                    
+                                    # Save result
+                                    st.session_state.exam_results.append({
+                                        "question": question_data.get("question"),
+                                        "user_answer": user_answer,
+                                        "correct_answer": result.get("correct_answer"),
+                                        "is_correct": result.get("is_correct", False),
+                                        "explanation": result.get("explanation", "")
+                                    })
+                                    
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error checking answer: {e}")
+            
+            # Show explanation after answer is checked
+            else:
+                result = st.session_state.current_answer_result
                 
-                options = question.get("options", [])
-                answer = st.radio(
-                    f"Select your answer:",
-                    options,
-                    key=f"q_{i}",
-                    index=None
-                )
-                st.session_state.exam_answers[i] = answer
-                st.write("")
-            
-            # Submit button
-            if st.button("📤 Submit Exam", type="primary", use_container_width=True):
-                st.session_state.exam_submitted = True
-                st.rerun()
-        else:
-            # Show results
-            st.success("🎉 Exam Submitted!")
-            questions = exam.get("questions", [])
-            correct_count = 0
-            
-            for i, question in enumerate(questions, 1):
-                user_answer = st.session_state.exam_answers.get(i)
-                correct_answer = question.get("correct_answer")
-                
-                is_correct = user_answer == correct_answer
-                if is_correct:
-                    correct_count += 1
-                
-                with st.expander(f"Question {i} - {'✅ Correct' if is_correct else '❌ Incorrect'}"):
-                    st.write(f"**Question:** {question.get('question')}")
-                    st.write(f"**Your Answer:** {user_answer or 'Not answered'}")
-                    st.write(f"**Correct Answer:** {correct_answer}")
-                    st.write(f"**Explanation:** {question.get('explanation', 'N/A')}")
-            
-            # Score
-            score = (correct_count / len(questions)) * 100
-            st.write("---")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Score", f"{score:.1f}%")
-            col2.metric("Correct", f"{correct_count}/{len(questions)}")
-            col3.metric("Pass", "✅ Yes" if score >= 70 else "❌ No")
-            
-            if st.button("🔄 Take Another Exam", use_container_width=True):
-                del st.session_state.current_exam
-                del st.session_state.exam_answers
-                del st.session_state.exam_submitted
-                st.rerun()
+                if result:
+                    # Show if correct or incorrect
+                    if result.get("is_correct", False):
+                        st.success("✅ Correct! Well done!")
+                    else:
+                        st.error("❌ Incorrect")
+                    
+                    st.write("---")
+                    
+                    # Show explanation
+                    st.subheader("📚 Explanation")
+                    st.write(result.get("explanation", "No explanation available"))
+                    
+                    st.write("---")
+                    
+                    # Show correct answer
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Your Answer:**")
+                        user_ans = st.session_state.exam_results[-1].get("user_answer")
+                        if isinstance(user_ans, list):
+                            for ans in user_ans:
+                                st.write(f"- {ans}")
+                        else:
+                            st.write(user_ans)
+                    
+                    with col2:
+                        st.write("**Correct Answer:**")
+                        correct_ans = result.get("correct_answer")
+                        if isinstance(correct_ans, list):
+                            for ans in correct_ans:
+                                st.write(f"- {ans}")
+                        else:
+                            st.write(correct_ans)
+                    
+                    # Show reference link if available
+                    if result.get("reference"):
+                        st.info(f"📖 Reference: {result.get('reference')}")
+                    
+                    st.write("---")
+                    
+                    # Next question or finish
+                    if st.session_state.question_number < st.session_state.total_questions:
+                        if st.button("➡️ Next Question", type="primary", use_container_width=True):
+                            # Get next question
+                            with st.spinner("🔄 Loading next question..."):
+                                ai_service = AIService()
+                                try:
+                                    next_question = ai_service.get_next_exam_question(
+                                        user["id"],
+                                        st.session_state.exam_session_id,
+                                        st.session_state.question_number
+                                    )
+                                    
+                                    if "error" not in next_question:
+                                        st.session_state.current_question = next_question
+                                        st.session_state.question_number = next_question.get("question_number", st.session_state.question_number + 1)
+                                        st.session_state.show_explanation = False
+                                        st.session_state.current_answer_result = None
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error loading next question: {next_question.get('error')}")
+                                except Exception as e:
+                                    st.error(f"Error loading next question: {e}")
+                    else:
+                        if st.button("🏁 Finish Exam", type="primary", use_container_width=True):
+                            # End exam session
+                            ai_service = AIService()
+                            try:
+                                final_results = ai_service.end_exam_session(
+                                    user["id"],
+                                    st.session_state.exam_session_id
+                                )
+                                st.session_state.final_exam_results = final_results
+                            except Exception as e:
+                                st.warning(f"Could not save final results: {e}")
+                            
+                            # Show final results
+                            st.balloons()
+                            st.success("🎉 Exam Complete!")
+                            
+                            # Calculate final score
+                            score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
+                            
+                            st.write("---")
+                            col1, col2, col3 = st.columns(3)
+                            col1.metric("Final Score", f"{score_percentage:.1f}%")
+                            col2.metric("Correct", f"{st.session_state.exam_score}/{st.session_state.total_questions}")
+                            col3.metric("Pass", "✅ Yes" if score_percentage >= 70 else "❌ No")
+                            
+                            st.write("---")
+                            st.subheader("📊 Question Review")
+                            
+                            for i, result in enumerate(st.session_state.exam_results, 1):
+                                status = "✅" if result["is_correct"] else "❌"
+                                with st.expander(f"{status} Question {i} - {result['question'][:60]}..."):
+                                    st.write(f"**Question:** {result['question']}")
+                                    st.write(f"**Your Answer:** {result['user_answer']}")
+                                    st.write(f"**Correct Answer:** {result['correct_answer']}")
+                                    st.write(f"**Explanation:** {result['explanation']}")
+                            
+                            st.write("---")
+                            if st.button("🔄 Take Another Exam", use_container_width=True):
+                                # Reset all exam session state
+                                st.session_state.exam_session_id = None
+                                st.session_state.current_question = None
+                                st.session_state.question_number = 0
+                                st.session_state.exam_score = 0
+                                st.session_state.exam_results = []
+                                st.session_state.show_explanation = False
+                                st.session_state.current_answer_result = None
+                                st.rerun()
+        
+        # Option to quit exam early
+        st.write("")
+        if st.button("❌ Quit Exam", use_container_width=True):
+            st.session_state.exam_session_id = None
+            st.session_state.current_question = None
+            st.session_state.question_number = 0
+            st.session_state.exam_score = 0
+            st.session_state.exam_results = []
+            st.session_state.show_explanation = False
+            st.session_state.current_answer_result = None
+            st.rerun()
 
 
 def show_study_tricks(user):

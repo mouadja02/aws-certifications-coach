@@ -41,7 +41,7 @@ class AIService:
             response = requests.post(
                 webhook_url,
                 json=data,
-                timeout=30,
+                timeout=600,
                 headers={"Content-Type": "application/json"}
             )
             
@@ -105,34 +105,38 @@ class AIService:
             print(f"❌ Error in chat service: {e}")
             return self._get_fallback_response(question)
     
-    def generate_exam_practice(
+    def start_exam_session(
         self,
         user_id: int,
         certification: str,
         difficulty: str = "medium",
-        num_questions: int = 5
+        total_questions: int = 10,
+        topic: str = "All Topics"
     ) -> Dict[str, Any]:
         """
-        Generate practice exam questions using n8n workflow
+        Start a new exam session and get the first question
         
         Args:
             user_id: User ID
             certification: Target certification
             difficulty: Question difficulty (easy, medium, hard)
-            num_questions: Number of questions to generate
+            total_questions: Total number of questions for this session
+            topic: Specific topic or "All Topics"
             
         Returns:
-            dict: Practice exam data
+            dict: Session data with first question
         """
         if self.use_fallback or not self.exam_webhook:
-            return {"error": "Exam practice not configured"}
+            return self._get_fallback_exam_question(1, total_questions)
         
         try:
             data = {
+                "action": "start_session",
                 "user_id": user_id,
                 "certification": certification,
                 "difficulty": difficulty,
-                "num_questions": num_questions,
+                "total_questions": total_questions,
+                "topic": topic,
                 "timestamp": datetime.utcnow().isoformat()
             }
             
@@ -142,9 +146,132 @@ class AIService:
             try:
                 return json.loads(response)
             except:
-                return {"questions": response}
+                return {"error": "Invalid response format", "raw": response}
         except Exception as e:
             print(f"❌ Error in exam service: {e}")
+            return {"error": str(e)}
+    
+    def check_exam_answer(
+        self,
+        user_id: int,
+        session_id: str,
+        question_id: str,
+        user_answer: Any,
+        question_text: str
+    ) -> Dict[str, Any]:
+        """
+        Check user's answer and get explanation
+        
+        Args:
+            user_id: User ID
+            session_id: Exam session ID
+            question_id: Current question ID
+            user_answer: User's selected answer(s)
+            question_text: The question text (for context)
+            
+        Returns:
+            dict: Evaluation with correct answer and explanation
+        """
+        if self.use_fallback or not self.exam_webhook:
+            return self._get_fallback_answer_check(user_answer)
+        
+        try:
+            data = {
+                "action": "check_answer",
+                "user_id": user_id,
+                "session_id": session_id,
+                "question_id": question_id,
+                "user_answer": user_answer,
+                "question_text": question_text,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            response = self._call_n8n_webhook(self.exam_webhook, data)
+            
+            # Try to parse as JSON if possible
+            try:
+                return json.loads(response)
+            except:
+                return {"error": "Invalid response format", "raw": response}
+        except Exception as e:
+            print(f"❌ Error checking answer: {e}")
+            return {"error": str(e)}
+    
+    def get_next_exam_question(
+        self,
+        user_id: int,
+        session_id: str,
+        current_question_number: int
+    ) -> Dict[str, Any]:
+        """
+        Get the next question in the exam session
+        
+        Args:
+            user_id: User ID
+            session_id: Exam session ID
+            current_question_number: Current question number
+            
+        Returns:
+            dict: Next question data
+        """
+        if self.use_fallback or not self.exam_webhook:
+            return self._get_fallback_exam_question(current_question_number + 1, 10)
+        
+        try:
+            data = {
+                "action": "next_question",
+                "user_id": user_id,
+                "session_id": session_id,
+                "current_question_number": current_question_number,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            response = self._call_n8n_webhook(self.exam_webhook, data)
+            
+            # Try to parse as JSON if possible
+            try:
+                return json.loads(response)
+            except:
+                return {"error": "Invalid response format", "raw": response}
+        except Exception as e:
+            print(f"❌ Error getting next question: {e}")
+            return {"error": str(e)}
+    
+    def end_exam_session(
+        self,
+        user_id: int,
+        session_id: str
+    ) -> Dict[str, Any]:
+        """
+        End exam session and get final results
+        
+        Args:
+            user_id: User ID
+            session_id: Exam session ID
+            
+        Returns:
+            dict: Final exam results and statistics
+        """
+        if self.use_fallback or not self.exam_webhook:
+            return {"message": "Exam session ended"}
+        
+        try:
+            data = {
+                "action": "end_session",
+                "user_id": user_id,
+                "session_id": session_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            response = self._call_n8n_webhook(self.exam_webhook, data)
+            
+            # Try to parse as JSON if possible
+            try:
+                return json.loads(response)
+            except:
+                return {"message": response}
+        except Exception as e:
+            print(f"❌ Error ending session: {e}")
             return {"error": str(e)}
     
     def get_study_tricks(
@@ -321,6 +448,54 @@ class AIService:
         Note: Configure n8n webhooks for personalized study recommendations!
         """
         return tricks
+    
+    def _get_fallback_exam_question(self, question_number: int, total_questions: int) -> Dict[str, Any]:
+        """Fallback exam question when n8n is not configured"""
+        sample_questions = [
+            {
+                "question": "Which AWS service provides object storage?",
+                "options": ["A) Amazon EBS", "B) Amazon S3", "C) Amazon EFS", "D) Amazon RDS"],
+                "correct_answer": "B) Amazon S3",
+                "type": "single"
+            },
+            {
+                "question": "What is the maximum size of an S3 object?",
+                "options": ["A) 5 GB", "B) 5 TB", "C) 500 GB", "D) 50 TB"],
+                "correct_answer": "B) 5 TB",
+                "type": "single"
+            },
+            {
+                "question": "Which services can be used for serverless computing? (Select TWO)",
+                "options": ["A) AWS Lambda", "B) Amazon EC2", "C) AWS Fargate", "D) Amazon RDS"],
+                "correct_answer": ["A) AWS Lambda", "C) AWS Fargate"],
+                "type": "multiple"
+            }
+        ]
+        
+        # Cycle through sample questions
+        idx = (question_number - 1) % len(sample_questions)
+        question = sample_questions[idx]
+        
+        return {
+            "session_id": "fallback_session",
+            "question_id": f"q_{question_number}",
+            "question_number": question_number,
+            "total_questions": total_questions,
+            "question": question["question"],
+            "options": question["options"],
+            "type": question["type"],
+            "message": "Using fallback mode. Configure n8n webhook for AI-generated questions."
+        }
+    
+    def _get_fallback_answer_check(self, user_answer: Any) -> Dict[str, Any]:
+        """Fallback answer check when n8n is not configured"""
+        return {
+            "is_correct": False,
+            "correct_answer": "B) Amazon S3",
+            "explanation": "Amazon S3 (Simple Storage Service) is AWS's object storage service. It provides scalable, durable, and highly available storage for objects (files). EBS is block storage, EFS is file storage, and RDS is a database service.",
+            "reference": "https://docs.aws.amazon.com/s3/",
+            "message": "Using fallback mode. Configure n8n webhook for AI-powered answer checking."
+        }
 
 
 if __name__ == "__main__":
