@@ -5,27 +5,32 @@ Handles caching and queue management for exam questions
 
 import json
 import streamlit as st
-import redis
+import valkey
 from typing import Optional, Dict, Any, List
 import logging
 
 logger = logging.getLogger(__name__)
 
 class ValkeyClient:
-    """Valkey (Redis-compatible) client for queue and cache management"""
+    """Valkey client for queue and cache management"""
     
     def __init__(self):
-        """Initialize Valkey connection from Streamlit secrets"""
+        """Initialize Valkey connection from Streamlit secrets using URI"""
         try:
-            self.client = redis.Redis(
-                host=st.secrets.get("VALKEY_HOST"),
-                port=int(st.secrets.get("VALKEY_PORT", 6379)),
-                password=st.secrets.get("VALKEY_PASSWORD"),
-                db=int(st.secrets.get("VALKEY_DB", 0)),
+            # Get Valkey URI from Streamlit secrets
+            valkey_uri = st.secrets.get("VALKEY_URI")
+            
+            if not valkey_uri:
+                raise ValueError("VALKEY_URI not found in Streamlit secrets")
+            
+            # Connect using URI (supports valkeys:// for SSL)
+            self.client = valkey.from_url(
+                valkey_uri,
                 decode_responses=True,
                 socket_connect_timeout=5,
                 socket_keepalive=True
             )
+            
             # Test connection
             self.client.ping()
             logger.info("✅ Valkey connection established")

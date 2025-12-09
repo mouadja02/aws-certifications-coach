@@ -10,16 +10,11 @@ import os
 import json
 from datetime import datetime
 from streamlit_option_menu import option_menu
-import asyncio
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log
 from ai_service import AIService
 from valkey_client import get_valkey_client
-
-# Global variables for the exam question FIFO queue
-EXAM_QUESTION_FIFO_QUEUE = asyncio.Queue(maxsize=40)
-EXAM_QUESTION_FIFO_QUEUE_LOCK = asyncio.Lock()
 
 def get_user_from_db(email: str):
     """Fetch user data from Snowflake"""
@@ -427,13 +422,13 @@ def show_practice_exam(user):
                             
                             # Clean up Valkey
                             valkey.delete_session(session_id)
-                            
+                                            
                             st.write("---")
                             col1, col2, col3 = st.columns(3)
                             col1.metric("Final Score", f"{score_percentage:.1f}%")
                             col2.metric("Correct", f"{st.session_state.exam_score}/{st.session_state.total_questions}")
                             col3.metric("Pass", "✅ Yes" if score_percentage >= 70 else "❌ No")
-                            
+
                             st.write("---")
                             st.subheader("📊 Question Review")
                             
