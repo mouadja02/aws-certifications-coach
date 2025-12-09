@@ -129,7 +129,7 @@ def show_practice_exam(user):
     # Exam settings
     col1, col2, col3 = st.columns(3)
     with col1:
-        num_questions = st.selectbox("Number of Questions", [5, 10, 15, 20, 30], index=1, key="num_q")
+        num_questions = st.selectbox("Number of Questions", [5, 10, 15, 20, 30, 40, 50], index=1, key="num_q")
     with col2:
         difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1, key="diff")
     with col3:
@@ -461,13 +461,19 @@ def show_practice_exam(user):
                             st.write("---")
                             if st.button("🔄 Take Another Exam", use_container_width=True):
                                 # Reset all exam session state  
-                                # Clean up
-                                data = {
-                                    "action": "quit_session",
-                                    "session_id": st.session_state.exam_session_id,
-                                    "timestamp": datetime.utcnow().isoformat()
-                                }
-                                ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+                                # Clean up - notify n8n to stop generating questions
+                                try:
+                                    data = {
+                                        "action": "quit_session",
+                                        "session_id": st.session_state.exam_session_id,
+                                        "timestamp": datetime.utcnow().isoformat()
+                                    }
+                                    result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+                                    if result and result.get("error"):
+                                        print(f"Warning: Could not notify n8n: {result.get('error')}")
+                                except Exception as e:
+                                    print(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking take another exam button")
+                                
                                 st.session_state.exam_session_id = None
                                 st.session_state.current_question = None
                                 st.session_state.question_number = 0
@@ -480,13 +486,19 @@ def show_practice_exam(user):
         # Option to quit exam early
         st.write("")
         if st.button("❌ Quit Exam", use_container_width=True):
-            # Clean up
-            data = {
-                "action": "quit_session",
-                "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+            # Clean up - notify n8n to stop generating questions
+            try:
+                data = {
+                    "action": "quit_session",
+                    "session_id": session_id,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+                if result and result.get("error"):
+                    print(f"Warning: Could not notify n8n: {result.get('error')}")
+            except Exception as e:
+                print(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking quit exam button")
+            
             valkey.delete_session(session_id)
             st.session_state.exam_session_id = None
             st.session_state.current_question = None
