@@ -1,6 +1,6 @@
 """
 AI Service for AWS Certifications Coach
-Handles AI-powered interactions via n8n workflows
+Handles AI-powered interactions via n8n workflows with Valkey queue management
 """
 
 import os
@@ -9,12 +9,12 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 import json
 import streamlit as st
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AIService:
-    """
-    AI Service that communicates with n8n workflows
-    Supports different workflow endpoints for various features
-    """
+    """AI Service that communicates with n8n workflows"""
     
     def __init__(self):
         # n8n webhook URLs from Streamlit secrets or environment variables
@@ -26,51 +26,55 @@ class AIService:
         # Fallback mode if no webhooks configured
         self.use_fallback = not self.chat_webhook
     
-    def _call_n8n_webhook(self, webhook_url: str, data: Dict[str, Any]) -> str:
+    def _call_n8n_webhook(self, webhook_url: str, data: Dict[str, Any], async_call: bool = False) -> Any:
         """
-        Call n8n webhook and return response
+        Call n8n webhook
         
         Args:
             webhook_url: The n8n webhook URL
             data: Data to send to the webhook
-            
+            async_call: If True, don't wait for response (fire and forget)
         Returns:
-            str: Response from n8n workflow
+            Response from n8n workflow or None if async
         """
         try:
-            response = requests.post(
-                webhook_url,
-                json=data,
-                timeout=600,
-                headers={"Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                
-                # Handle different response formats from n8n
-                if isinstance(result, list) and len(result) > 0:
-                    result = result[0]
-                
-                if isinstance(result, dict):
-                    # Look for common response keys
-                    for key in ["output", "text", "answer", "message", "response", "result"]:
-                        if key in result:
-                            return str(result[key])
-                    # Return JSON string if no standard key found
-                    return json.dumps(result, indent=2)
-                
-                return str(result)
+            if async_call:
+                # Fire and forget - don't wait for response
+                requests.post(
+                    webhook_url,
+                    json=data,
+                    timeout=2,  # Short timeout for async calls
+                    headers={"Content-Type": "application/json"}
+                )
+                return None
             else:
-                print(f"❌ n8n webhook error: {response.status_code}")
-                return self._get_fallback_response("Error calling AI service")
+                response = requests.post(
+                    webhook_url,
+                    json=data,
+                    timeout=30,
+                    headers={"Content-Type": "application/json"}
+                )
                 
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    logger.error(f"n8n webhook error: {response.status_code}")
+                    return {"error": f"HTTP {response.status_code}"}
+                    
         except requests.exceptions.Timeout:
-            print("❌ n8n webhook timeout")
-            return "I apologize, but the request timed out. Please try again."
-        except requests.exceptions.RequestException as e:
-            print(f"❌ n8n webhook request failed: {e}")
-            return self._get_fallback_response("Connection error")
+            if not async_call:
+                logger.error("n8n webhook timeout")
+                return {"error": "Request timed out"}
+            return None
+        except Exception as e:
+            if not async_call:
+                logger.error(f"n8n webhook request failed: {e}")
+                return {"error": str(e)}
+            return None
+    
+    # ============================================
+    # CHAT OPERATIONS
+    # ============================================
     
     def answer_question(
         self,
@@ -78,17 +82,7 @@ class AIService:
         question: str,
         context: Optional[str] = None
     ) -> str:
-        """
-        Answer a question using n8n chat workflow
-        
-        Args:
-            user_id: User ID for context
-            question: User's question
-            context: Additional context (certification type, etc.)
-            
-        Returns:
-            str: Answer from n8n workflow
-        """
+        """Answer a question using n8n chat workflow"""
         if self.use_fallback or not self.chat_webhook:
             return self._get_fallback_response(question)
         
@@ -100,38 +94,47 @@ class AIService:
                 "timestamp": datetime.utcnow().isoformat()
             }
             
-            return self._call_n8n_webhook(self.chat_webhook, data)
+            result = self._call_n8n_webhook(self.chat_webhook, data)
+            
+            if isinstance(result, dict):
+                # Extract response from various possible keys
+                for key in ["output", "text", "answer", "message", "response", "result"]:
+                    if key in result:
+                        return str(result[key])
+                return json.dumps(result, indent=2)
+            
+            return str(result)
         except Exception as e:
-            print(f"❌ Error in chat service: {e}")
+            logger.error(f"Error in chat service: {e}")
             return self._get_fallback_response(question)
     
-    def start_exam_session(
+    # ============================================
+    # EXAM OPERATIONS (Queue-based)
+    # ============================================
+    
+    def trigger_exam_generation(
         self,
+        session_id: str,
         user_id: int,
         certification: str,
-        difficulty: str = "medium",
-        total_questions: int = 10,
-        topic: str = "All Topics"
-    ) -> Dict[str, Any]:
+        difficulty: str,
+        total_questions: int,
+        topic: str
+    ) -> bool:
         """
-        Start a new exam session and get the first question
+        Trigger background question generation workflow
+        The workflow will continuously generate questions and push to Valkey queue
         
-        Args:
-            user_id: User ID
-            certification: Target certification
-            difficulty: Question difficulty (easy, medium, hard)
-            total_questions: Total number of questions for this session
-            topic: Specific topic or "All Topics"
-            
         Returns:
-            dict: Session data with first question
+            bool: Success status of trigger
         """
-        if self.use_fallback or not self.exam_webhook:
-            return self._get_fallback_exam_question(1, total_questions)
+        if not self.exam_webhook:
+            return False
         
         try:
             data = {
-                "action": "start_session",
+                "action": "generate_questions",
+                "session_id": session_id,
                 "user_id": user_id,
                 "certification": certification,
                 "difficulty": difficulty,
@@ -140,157 +143,62 @@ class AIService:
                 "timestamp": datetime.utcnow().isoformat()
             }
             
-            response = self._call_n8n_webhook(self.exam_webhook, data)
+            # Async call - don't wait for response
+            self._call_n8n_webhook(self.exam_webhook, data, async_call=True)
+            logger.info(f"✅ Triggered exam generation for session {session_id}")
+            return True
             
-            # Try to parse as JSON if possible
-            try:
-                return json.loads(response)
-            except:
-                return {"error": "Invalid response format", "raw": response}
         except Exception as e:
-            print(f"❌ Error in exam service: {e}")
-            return {"error": str(e)}
+            logger.error(f"Error triggering exam generation: {e}")
+            return False
     
-    def check_exam_answer(
+    def check_answer(
         self,
-        user_id: int,
-        session_id: str,
-        question_id: str,
         user_answer: Any,
-        question_text: str
+        correct_answer: Any,
+        question_text: str,
+        explanation: str
     ) -> Dict[str, Any]:
         """
-        Check user's answer and get explanation
+        Check if user's answer is correct (client-side, no API call needed)
         
         Args:
-            user_id: User ID
-            session_id: Exam session ID
-            question_id: Current question ID
             user_answer: User's selected answer(s)
-            question_text: The question text (for context)
-            
+            correct_answer: Correct answer(s) from Valkey
+            question_text: The question text
+            explanation: Pre-generated explanation
         Returns:
-            dict: Evaluation with correct answer and explanation
+            dict: Result with is_correct and explanation
         """
-        if self.use_fallback or not self.exam_webhook:
-            return self._get_fallback_answer_check(user_answer)
+        # Normalize answers for comparison
+        def normalize_answer(answer):
+            if isinstance(answer, list):
+                return sorted([str(a).strip().upper() for a in answer])
+            return str(answer).strip().upper()
         
-        try:
-            data = {
-                "action": "check_answer",
-                "user_id": user_id,
-                "session_id": session_id,
-                "question_id": question_id,
-                "user_answer": user_answer,
-                "question_text": question_text,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            
-            response = self._call_n8n_webhook(self.exam_webhook, data)
-            
-            # Try to parse as JSON if possible
-            try:
-                return json.loads(response)
-            except:
-                return {"error": "Invalid response format", "raw": response}
-        except Exception as e:
-            print(f"❌ Error checking answer: {e}")
-            return {"error": str(e)}
+        user_normalized = normalize_answer(user_answer)
+        correct_normalized = normalize_answer(correct_answer)
+        
+        is_correct = user_normalized == correct_normalized
+        
+        return {
+            "is_correct": is_correct,
+            "correct_answer": correct_answer,
+            "explanation": explanation,
+            "user_answer": user_answer
+        }
     
-    def get_next_exam_question(
-        self,
-        user_id: int,
-        session_id: str,
-        current_question_number: int
-    ) -> Dict[str, Any]:
-        """
-        Get the next question in the exam session
-        
-        Args:
-            user_id: User ID
-            session_id: Exam session ID
-            current_question_number: Current question number
-            
-        Returns:
-            dict: Next question data
-        """
-        if self.use_fallback or not self.exam_webhook:
-            return self._get_fallback_exam_question(current_question_number + 1, 10)
-        
-        try:
-            data = {
-                "action": "next_question",
-                "user_id": user_id,
-                "session_id": session_id,
-                "current_question_number": current_question_number,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            
-            response = self._call_n8n_webhook(self.exam_webhook, data)
-            
-            # Try to parse as JSON if possible
-            try:
-                return json.loads(response)
-            except:
-                return {"error": "Invalid response format", "raw": response}
-        except Exception as e:
-            print(f"❌ Error getting next question: {e}")
-            return {"error": str(e)}
-    
-    def end_exam_session(
-        self,
-        user_id: int,
-        session_id: str
-    ) -> Dict[str, Any]:
-        """
-        End exam session and get final results
-        
-        Args:
-            user_id: User ID
-            session_id: Exam session ID
-            
-        Returns:
-            dict: Final exam results and statistics
-        """
-        if self.use_fallback or not self.exam_webhook:
-            return {"message": "Exam session ended"}
-        
-        try:
-            data = {
-                "action": "end_session",
-                "user_id": user_id,
-                "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            
-            response = self._call_n8n_webhook(self.exam_webhook, data)
-            
-            # Try to parse as JSON if possible
-            try:
-                return json.loads(response)
-            except:
-                return {"message": response}
-        except Exception as e:
-            print(f"❌ Error ending session: {e}")
-            return {"error": str(e)}
+    # ============================================
+    # STUDY TRICKS
+    # ============================================
     
     def get_study_tricks(
         self,
         user_id: int,
         certification: str,
-        topic: Optional[str] = None
-    ) -> str:
-        """
-        Get study tricks and tips using n8n workflow
-        
-        Args:
-            user_id: User ID
-            certification: Target certification
-            topic: Specific topic (optional)
-            
-        Returns:
-            str: Study tricks and tips
-        """
+        topic: str
+    ) -> Dict[str, Any]:
+        """Get study tricks and tips using n8n workflow"""
         if self.use_fallback or not self.tricks_webhook:
             return self._get_fallback_tricks(topic)
         
@@ -298,13 +206,23 @@ class AIService:
             data = {
                 "user_id": user_id,
                 "certification": certification,
-                "topic": topic or "",
+                "topic": topic,
                 "timestamp": datetime.utcnow().isoformat()
             }
             
-            return self._call_n8n_webhook(self.tricks_webhook, data)
+            result = self._call_n8n_webhook(self.tricks_webhook, data)
+            
+            if isinstance(result, dict):
+                return result
+            
+            # Try to parse as JSON
+            try:
+                return json.loads(str(result))
+            except:
+                return {"tricks": str(result)}
+                
         except Exception as e:
-            print(f"❌ Error in tricks service: {e}")
+            logger.error(f"Error in tricks service: {e}")
             return self._get_fallback_tricks(topic)
     
     def evaluate_answer(
@@ -312,20 +230,9 @@ class AIService:
         user_id: int,
         question: str,
         user_answer: str,
-        correct_answer: str
+        certification: str
     ) -> Dict[str, Any]:
-        """
-        Evaluate user's answer using n8n workflow
-        
-        Args:
-            user_id: User ID
-            question: The question
-            user_answer: User's answer
-            correct_answer: Correct answer
-            
-        Returns:
-            dict: Evaluation results with feedback
-        """
+        """Evaluate user's written answer using n8n workflow"""
         if self.use_fallback or not self.evaluation_webhook:
             return {"score": 0, "feedback": "Evaluation not configured"}
         
@@ -334,28 +241,32 @@ class AIService:
                 "user_id": user_id,
                 "question": question,
                 "user_answer": user_answer,
-                "correct_answer": correct_answer,
+                "certification": certification,
                 "timestamp": datetime.utcnow().isoformat()
             }
             
-            response = self._call_n8n_webhook(self.evaluation_webhook, data)
+            result = self._call_n8n_webhook(self.evaluation_webhook, data)
             
-            # Try to parse as JSON if possible
+            if isinstance(result, dict):
+                return result
+            
+            # Try to parse as JSON
             try:
-                return json.loads(response)
+                return json.loads(str(result))
             except:
-                return {"feedback": response}
+                return {"feedback": str(result)}
+                
         except Exception as e:
-            print(f"❌ Error in evaluation service: {e}")
+            logger.error(f"Error in evaluation service: {e}")
             return {"error": str(e)}
     
+    # ============================================
+    # FALLBACK RESPONSES
+    # ============================================
+    
     def _get_fallback_response(self, question: str) -> str:
-        """
-        Fallback response system when AI APIs are not available
-        Provides helpful AWS certification information
-        """
+        """Fallback response system when AI APIs are not available"""
         
-        # Knowledge base for common AWS certification questions
         knowledge_base = {
             "s3": """Amazon S3 (Simple Storage Service) is an object storage service offering:
             - Scalability: Store unlimited data
@@ -391,124 +302,33 @@ class AIService:
             - Use Cases: APIs, data processing, automation"""
         }
         
-        # Search for relevant knowledge
         question_lower = question.lower()
         for keyword, answer in knowledge_base.items():
             if keyword in question_lower:
-                return f"""Based on AWS best practices and certification materials:\n\n{answer}
-                
-                \n\nFor more detailed information, I recommend:
-                1. AWS Official Documentation
-                2. AWS Certified Solutions Architect Study Guide
-                3. AWS Hands-on Labs and Tutorials
-                
-                \n\n💡 Tip: Practice with AWS Free Tier to gain hands-on experience!
-                
-                \n\nNote: This is a basic response. For AI-powered detailed answers, configure an AI API key (OpenAI or Anthropic)."""
+                return f"Based on AWS best practices:\n\n{answer}\n\n💡 Tip: Configure n8n webhook for AI-powered answers!"
         
-        # Generic response if no specific match
-        return f"""Thank you for your question: "{question}"
-        
-        I'm currently running in fallback mode. For detailed AI-powered responses, 
-        please configure an AI API key (OpenAI or Anthropic) in your environment variables.
-        
-        Here are some general AWS certification tips:
-        
-        1. **Understand the Fundamentals**: Focus on core services (EC2, S3, VPC, IAM)
-        2. **Hands-on Practice**: Use AWS Free Tier for practical experience
-        3. **Study Resources**: 
-           - AWS Documentation (https://docs.aws.amazon.com/)
-           - AWS Training and Certification (https://aws.amazon.com/training/)
-           - Practice exams and whitepapers
-        4. **Key Areas**: 
-           - Compute (EC2, Lambda)
-           - Storage (S3, EBS, EFS)
-           - Networking (VPC, Route 53, CloudFront)
-           - Security (IAM, KMS, CloudTrail)
-           - Databases (RDS, DynamoDB)
-        
-        Good luck with your certification preparation! 🚀"""
+        return f"Thank you for your question: '{question}'\n\nPlease configure N8N_CHAT_WEBHOOK_URL in Streamlit secrets for AI-powered responses."
     
-    def _get_fallback_tricks(self, topic: Optional[str]) -> str:
+    def _get_fallback_tricks(self, topic: str) -> Dict[str, Any]:
         """Fallback study tricks when n8n is not configured"""
-        tricks = f"""
-        📚 Study Tricks and Tips{f' for {topic}' if topic else ''}:
-        
-        1. **Active Recall**: Test yourself regularly instead of just re-reading
-        2. **Spaced Repetition**: Review material at increasing intervals
-        3. **Hands-On Practice**: Use AWS Free Tier to gain practical experience
-        4. **Mind Maps**: Create visual connections between AWS services
-        5. **Study Groups**: Explain concepts to others to reinforce learning
-        6. **Official Documentation**: AWS docs are the most reliable source
-        7. **Practice Exams**: Take mock tests to identify weak areas
-        8. **Real-World Scenarios**: Think about how services solve actual problems
-        
-        💡 Pro Tip: Focus on understanding WHY services work, not just HOW.
-        
-        Note: Configure n8n webhooks for personalized study recommendations!
-        """
-        return tricks
-    
-    def _get_fallback_exam_question(self, question_number: int, total_questions: int) -> Dict[str, Any]:
-        """Fallback exam question when n8n is not configured"""
-        sample_questions = [
-            {
-                "question": "Which AWS service provides object storage?",
-                "options": ["A) Amazon EBS", "B) Amazon S3", "C) Amazon EFS", "D) Amazon RDS"],
-                "correct_answer": "B) Amazon S3",
-                "type": "single"
-            },
-            {
-                "question": "What is the maximum size of an S3 object?",
-                "options": ["A) 5 GB", "B) 5 TB", "C) 500 GB", "D) 50 TB"],
-                "correct_answer": "B) 5 TB",
-                "type": "single"
-            },
-            {
-                "question": "Which services can be used for serverless computing? (Select TWO)",
-                "options": ["A) AWS Lambda", "B) Amazon EC2", "C) AWS Fargate", "D) Amazon RDS"],
-                "correct_answer": ["A) AWS Lambda", "C) AWS Fargate"],
-                "type": "multiple"
-            }
-        ]
-        
-        # Cycle through sample questions
-        idx = (question_number - 1) % len(sample_questions)
-        question = sample_questions[idx]
-        
         return {
-            "session_id": "fallback_session",
-            "question_id": f"q_{question_number}",
-            "question_number": question_number,
-            "total_questions": total_questions,
-            "question": question["question"],
-            "options": question["options"],
-            "type": question["type"],
-            "message": "Using fallback mode. Configure n8n webhook for AI-generated questions."
-        }
-    
-    def _get_fallback_answer_check(self, user_answer: Any) -> Dict[str, Any]:
-        """Fallback answer check when n8n is not configured"""
-        return {
-            "is_correct": False,
-            "correct_answer": "B) Amazon S3",
-            "explanation": "Amazon S3 (Simple Storage Service) is AWS's object storage service. It provides scalable, durable, and highly available storage for objects (files). EBS is block storage, EFS is file storage, and RDS is a database service.",
-            "reference": "https://docs.aws.amazon.com/s3/",
-            "message": "Using fallback mode. Configure n8n webhook for AI-powered answer checking."
+            "mnemonic": f"Create a memorable acronym for {topic} concepts",
+            "analogy": f"Think of {topic} like everyday objects and processes",
+            "visualization": f"Draw diagrams to visualize {topic} architecture",
+            "key_points": [
+                "Practice with hands-on labs",
+                "Review AWS documentation",
+                "Take practice exams regularly",
+                "Join study groups"
+            ]
         }
 
 
 if __name__ == "__main__":
     # Test the AI service
-    import asyncio
-    
-    def test():
-        service = AIService()
-        response = service.answer_question(
-            user_id=1,
-            question="What is Amazon S3 and what are its main features?"
-        )
-        print(response)
-    
-    asyncio.run(test())
-
+    service = AIService()
+    response = service.answer_question(
+        user_id=1,
+        question="What is Amazon S3?"
+    )
+    print(response)

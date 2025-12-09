@@ -10,10 +10,16 @@ import os
 import json
 from datetime import datetime
 from streamlit_option_menu import option_menu
+import asyncio
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log
 from ai_service import AIService
+from valkey_client import get_valkey_client
+
+# Global variables for the exam question FIFO queue
+EXAM_QUESTION_FIFO_QUEUE = asyncio.Queue(maxsize=40)
+EXAM_QUESTION_FIFO_QUEUE_LOCK = asyncio.Lock()
 
 def get_user_from_db(email: str):
     """Fetch user data from Snowflake"""
@@ -95,7 +101,7 @@ def show_ai_chat(user):
 
 
 def show_practice_exam(user):
-    """Practice Exam Section - Interactive exam with AI-generated questions"""
+    """Practice Exam Section - Fast queue-based exam with AI-generated questions"""
     st.header("📝 Practice Exams")
     st.markdown(f"Practice for **{user['target_certification']}** - AWS Official Exam Style")
     
@@ -117,6 +123,10 @@ def show_practice_exam(user):
     if "current_answer_result" not in st.session_state:
         st.session_state.current_answer_result = None
     
+    # Get Valkey client
+    valkey = get_valkey_client()
+    ai_service = AIService()
+    
     # If no exam session is active, show exam setup
     if st.session_state.exam_session_id is None:
         st.info("👇 Configure your practice exam settings and click 'Start Exam' to begin")
@@ -133,22 +143,58 @@ def show_practice_exam(user):
         st.write("---")
         
         if st.button("🚀 Start Exam", type="primary", use_container_width=True):
-            with st.spinner("🔄 Starting your practice exam..."):
-                ai_service = AIService()
-                try:
-                    # Start exam session and get first question
-                    session_data = ai_service.start_exam_session(
-                        user["id"],
-                        user["target_certification"],
-                        difficulty=difficulty.lower(),
-                        total_questions=num_questions,
-                        topic=topic
-                    )
+            # Generate unique session ID
+            session_id = f"exam_{user['id']}_{int(datetime.now().timestamp())}"
+            
+            # Clear any existing queue
+            valkey.clear_queue(session_id)
+            
+            # Create session data
+            session_data = {
+                "session_id": session_id,
+                "user_id": user["id"],
+                "certification": user["target_certification"],
+                "difficulty": difficulty.lower(),
+                "topic": topic,
+                "total_questions": num_questions,
+                "score": 0,
+                "answers": [],
+                "started_at": datetime.now().isoformat()
+            }
+            
+            # Save session to Valkey
+            if valkey.save_session(session_id, session_data):
+                # Trigger background question generation
+                success = ai_service.trigger_exam_generation(
+                    session_id=session_id,
+                    user_id=user["id"],
+                    certification=user["target_certification"],
+                    difficulty=difficulty.lower(),
+                    total_questions=num_questions,
+                    topic=topic
+                )
+                
+                if success:
+                    st.info("⏳ Generating first question...")
                     
-                    if "error" not in session_data:
-                        st.session_state.exam_session_id = session_data.get("session_id")
-                        st.session_state.current_question = session_data
-                        st.session_state.question_number = session_data.get("question_number", 1)
+                    # Wait for first question (with timeout)
+                    max_wait = 30  # 30 seconds max
+                    wait_interval = 1  # Check every 1 second
+                    waited = 0
+                    
+                    question_data = None
+                    while waited < max_wait:
+                        question_data = valkey.pop_question(session_id)
+                        if question_data:
+                            break
+                        time.sleep(wait_interval)
+                        waited += wait_interval
+                    
+                    if question_data:
+                        # Success! Start exam
+                        st.session_state.exam_session_id = session_id
+                        st.session_state.current_question = question_data
+                        st.session_state.question_number = 1
                         st.session_state.total_questions = num_questions
                         st.session_state.exam_score = 0
                         st.session_state.exam_results = []
@@ -157,16 +203,25 @@ def show_practice_exam(user):
                         st.success("✅ Exam started!")
                         st.rerun()
                     else:
-                        st.error(f"Error starting exam: {session_data.get('error')}")
-                except Exception as e:
-                    st.error(f"Error starting exam: {e}")
+                        st.error("❌ Timeout waiting for first question. Please try again.")
+                        valkey.delete_session(session_id)
+                else:
+                    st.error("❌ Could not start exam. Check n8n webhook configuration.")
+                    valkey.delete_session(session_id)
+            else:
+                st.error("❌ Could not connect to Valkey. Check configuration.")
     
     # If exam session is active, show current question
     else:
+        session_id = st.session_state.exam_session_id
+        
         # Progress bar
         progress = st.session_state.question_number / st.session_state.total_questions
         st.progress(progress)
-        st.caption(f"Question {st.session_state.question_number} of {st.session_state.total_questions}")
+        
+        # Show queue status
+        queue_length = valkey.get_queue_length(session_id)
+        st.caption(f"Question {st.session_state.question_number} of {st.session_state.total_questions} | Queue: {queue_length} questions ready")
         
         st.write("---")
         
@@ -196,36 +251,37 @@ def show_practice_exam(user):
                     col1, col2 = st.columns([3, 1])
                     with col2:
                         if st.button("✅ Check Answer", type="primary", use_container_width=True, disabled=len(user_answers) == 0):
-                            # Check answer with AI
-                            with st.spinner("🤔 Checking your answer..."):
-                                ai_service = AIService()
-                                try:
-                                    result = ai_service.check_exam_answer(
-                                        user["id"],
-                                        st.session_state.exam_session_id,
-                                        question_data.get("question_id"),
-                                        user_answers,
-                                        question_data.get("question")
-                                    )
-                                    st.session_state.current_answer_result = result
-                                    st.session_state.show_explanation = True
-                                    
-                                    # Update score
-                                    if result.get("is_correct", False):
-                                        st.session_state.exam_score += 1
-                                    
-                                    # Save result
-                                    st.session_state.exam_results.append({
-                                        "question": question_data.get("question"),
-                                        "user_answer": user_answers,
-                                        "correct_answer": result.get("correct_answer"),
-                                        "is_correct": result.get("is_correct", False),
-                                        "explanation": result.get("explanation", "")
-                                    })
-                                    
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error checking answer: {e}")
+                            # Check answer locally (instant)
+                            result = ai_service.check_answer(
+                                user_answer=user_answers,
+                                correct_answer=question_data.get("correct_answer"),
+                                question_text=question_data.get("question"),
+                                explanation=question_data.get("explanation", "No explanation available")
+                            )
+                            
+                            st.session_state.current_answer_result = result
+                            st.session_state.show_explanation = True
+                            
+                            # Update score
+                            if result.get("is_correct", False):
+                                st.session_state.exam_score += 1
+                            
+                            # Save result
+                            st.session_state.exam_results.append({
+                                "question": question_data.get("question"),
+                                "user_answer": user_answers,
+                                "correct_answer": result.get("correct_answer"),
+                                "is_correct": result.get("is_correct", False),
+                                "explanation": result.get("explanation", "")
+                            })
+                            
+                            # Update session in Valkey
+                            valkey.update_session(session_id, {
+                                "score": st.session_state.exam_score,
+                                "last_question": st.session_state.question_number
+                            })
+                            
+                            st.rerun()
                 else:
                     # Single choice question
                     user_answer = st.radio(
@@ -239,36 +295,37 @@ def show_practice_exam(user):
                     col1, col2 = st.columns([3, 1])
                     with col2:
                         if st.button("✅ Check Answer", type="primary", use_container_width=True, disabled=user_answer is None):
-                            # Check answer with AI
-                            with st.spinner("🤔 Checking your answer..."):
-                                ai_service = AIService()
-                                try:
-                                    result = ai_service.check_exam_answer(
-                                        user["id"],
-                                        st.session_state.exam_session_id,
-                                        question_data.get("question_id"),
-                                        user_answer,
-                                        question_data.get("question")
-                                    )
-                                    st.session_state.current_answer_result = result
-                                    st.session_state.show_explanation = True
-                                    
-                                    # Update score
-                                    if result.get("is_correct", False):
-                                        st.session_state.exam_score += 1
-                                    
-                                    # Save result
-                                    st.session_state.exam_results.append({
-                                        "question": question_data.get("question"),
-                                        "user_answer": user_answer,
-                                        "correct_answer": result.get("correct_answer"),
-                                        "is_correct": result.get("is_correct", False),
-                                        "explanation": result.get("explanation", "")
-                                    })
-                                    
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error checking answer: {e}")
+                            # Check answer locally (instant)
+                            result = ai_service.check_answer(
+                                user_answer=user_answer,
+                                correct_answer=question_data.get("correct_answer"),
+                                question_text=question_data.get("question"),
+                                explanation=question_data.get("explanation", "No explanation available")
+                            )
+                            
+                            st.session_state.current_answer_result = result
+                            st.session_state.show_explanation = True
+                            
+                            # Update score
+                            if result.get("is_correct", False):
+                                st.session_state.exam_score += 1
+                            
+                            # Save result
+                            st.session_state.exam_results.append({
+                                "question": question_data.get("question"),
+                                "user_answer": user_answer,
+                                "correct_answer": result.get("correct_answer"),
+                                "is_correct": result.get("is_correct", False),
+                                "explanation": result.get("explanation", "")
+                            })
+                            
+                            # Update session in Valkey
+                            valkey.update_session(session_id, {
+                                "score": st.session_state.exam_score,
+                                "last_question": st.session_state.question_number
+                            })
+                            
+                            st.rerun()
             
             # Show explanation after answer is checked
             else:
@@ -310,53 +367,66 @@ def show_practice_exam(user):
                             st.write(correct_ans)
                     
                     # Show reference link if available
-                    if result.get("reference"):
-                        st.info(f"📖 Reference: {result.get('reference')}")
+                    if question_data.get("reference"):
+                        st.info(f"📖 Reference: {question_data.get('reference')}")
                     
                     st.write("---")
                     
                     # Next question or finish
                     if st.session_state.question_number < st.session_state.total_questions:
                         if st.button("➡️ Next Question", type="primary", use_container_width=True):
-                            # Get next question
-                            with st.spinner("🔄 Loading next question..."):
-                                ai_service = AIService()
-                                try:
-                                    next_question = ai_service.get_next_exam_question(
-                                        user["id"],
-                                        st.session_state.exam_session_id,
-                                        st.session_state.question_number
-                                    )
-                                    
-                                    if "error" not in next_question:
-                                        st.session_state.current_question = next_question
-                                        st.session_state.question_number = next_question.get("question_number", st.session_state.question_number + 1)
-                                        st.session_state.show_explanation = False
-                                        st.session_state.current_answer_result = None
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Error loading next question: {next_question.get('error')}")
-                                except Exception as e:
-                                    st.error(f"Error loading next question: {e}")
+                            # Get next question from queue (instant!)
+                            next_question = valkey.pop_question(session_id)
+                            
+                            if next_question:
+                                st.session_state.current_question = next_question
+                                st.session_state.question_number += 1
+                                st.session_state.show_explanation = False
+                                st.session_state.current_answer_result = None
+                                st.rerun()
+                            else:
+                                st.warning("⏳ Waiting for next question... (generating in background)")
+                                time.sleep(2)
+                                st.rerun()
                     else:
                         if st.button("🏁 Finish Exam", type="primary", use_container_width=True):
-                            # End exam session
-                            ai_service = AIService()
-                            try:
-                                final_results = ai_service.end_exam_session(
-                                    user["id"],
-                                    st.session_state.exam_session_id
-                                )
-                                st.session_state.final_exam_results = final_results
-                            except Exception as e:
-                                st.warning(f"Could not save final results: {e}")
-                            
                             # Show final results
                             st.balloons()
                             st.success("🎉 Exam Complete!")
                             
                             # Calculate final score
                             score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
+                            
+                            # Save to database (save session results)
+                            try:
+                                from database import execute_update
+                                query = f"""
+                                INSERT INTO exam_sessions (
+                                    session_id, user_id, certification, difficulty, topic,
+                                    total_questions, correct_answers, incorrect_answers,
+                                    percentage, passed, started_at, completed_at, duration_minutes
+                                ) VALUES (
+                                    '{session_id}',
+                                    {user['id']},
+                                    '{user['target_certification']}',
+                                    '{valkey.get_session(session_id).get('difficulty', 'medium')}',
+                                    '{valkey.get_session(session_id).get('topic', 'All Topics')}',
+                                    {st.session_state.total_questions},
+                                    {st.session_state.exam_score},
+                                    {st.session_state.total_questions - st.session_state.exam_score},
+                                    {score_percentage},
+                                    {str(score_percentage >= 70).upper()},
+                                    '{valkey.get_session(session_id).get('started_at')}',
+                                    '{datetime.now().isoformat()}',
+                                    {int((datetime.now() - datetime.fromisoformat(valkey.get_session(session_id).get('started_at'))).seconds / 60)}
+                                )
+                                """
+                                execute_update(query)
+                            except Exception as e:
+                                st.warning(f"Could not save results to database: {e}")
+                            
+                            # Clean up Valkey
+                            valkey.delete_session(session_id)
                             
                             st.write("---")
                             col1, col2, col3 = st.columns(3)
@@ -390,6 +460,8 @@ def show_practice_exam(user):
         # Option to quit exam early
         st.write("")
         if st.button("❌ Quit Exam", use_container_width=True):
+            # Clean up
+            valkey.delete_session(session_id)
             st.session_state.exam_session_id = None
             st.session_state.current_question = None
             st.session_state.question_number = 0
