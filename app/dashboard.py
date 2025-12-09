@@ -442,7 +442,14 @@ def show_practice_exam(user):
                             
                             st.write("---")
                             if st.button("🔄 Take Another Exam", use_container_width=True):
-                                # Reset all exam session state
+                                # Reset all exam session state  
+                                # Clean up
+                                data = {
+                                    "action": "quit_session",
+                                    "session_id": st.session_state.exam_session_id,
+                                    "timestamp": datetime.utcnow().isoformat()
+                                }
+                                ai_service._call_n8n_webhook(st.session_state.exam_session_id,data,async_call=True)
                                 st.session_state.exam_session_id = None
                                 st.session_state.current_question = None
                                 st.session_state.question_number = 0
