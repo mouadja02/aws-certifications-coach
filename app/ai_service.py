@@ -66,11 +66,6 @@ class AIService:
                 logger.error("n8n webhook timeout")
                 return {"error": "Request timed out"}
             return None
-        except Exception as e:
-            if not async_call:
-                logger.error(f"n8n webhook request failed: {e}")
-                return {"error": str(e)}
-            return None
     
     # ============================================
     # CHAT OPERATIONS
