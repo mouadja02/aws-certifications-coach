@@ -180,6 +180,7 @@ def show_practice_exam(user):
                     question_data = None
                     while waited < max_wait:
                         question_data = valkey.pop_question(session_id)
+                        print(question_data)
                         if question_data:
                             break
                         time.sleep(wait_interval)
