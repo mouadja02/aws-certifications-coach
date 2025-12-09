@@ -129,12 +129,30 @@ def show_practice_exam(user):
     # Exam settings
     col1, col2, col3 = st.columns(3)
     with col1:
-            num_questions = st.selectbox("Number of Questions", [5, 10, 15, 20, 30], index=1, key="num_q")
+        num_questions = st.selectbox("Number of Questions", [5, 10, 15, 20, 30], index=1, key="num_q")
     with col2:
-            difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1, key="diff")
+        difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1, key="diff")
     with col3:
-            topic = st.selectbox("Topic", ["All Topics", "EC2", "S3", "VPC", "IAM", "Lambda", "RDS", "CloudFormation", "CloudWatch"], key="topic")
-        
+        topic = st.selectbox("Topic", [
+            "All Topics",
+            "Storage Services",
+            "Compute Services", 
+            "Networking & Content Delivery",
+            "Database Services",
+            "Security, Identity & Compliance",
+            "Management & Governance",
+            "Application Integration",
+            "Analytics & Big Data",
+            "Machine Learning & AI",
+            "Developer Tools & DevOps",
+            "Migration & Transfer",
+            "Cost Management",
+            "Serverless Computing",
+            "Containers",
+            "High Availability & Fault Tolerance",
+            "Well-Architected Framework",
+            "Hybrid Cloud & Edge"
+        ], key="topic")        
     st.write("---")
 
     if st.button("🚀 Start Exam", type="primary", use_container_width=True):
