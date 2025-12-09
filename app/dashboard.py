@@ -456,6 +456,12 @@ def show_practice_exam(user):
         st.write("")
         if st.button("❌ Quit Exam", use_container_width=True):
             # Clean up
+            data = {
+                "action": "quit_session",
+                "session_id": session_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            ai_service._call_n8n_webhook(session_id,data,async_call=True)
             valkey.delete_session(session_id)
             st.session_state.exam_session_id = None
             st.session_state.current_question = None
