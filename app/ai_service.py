@@ -163,27 +163,43 @@ class AIService:
         Check if user's answer is correct (client-side, no API call needed)
         
         Args:
-            user_answer: User's selected answer(s)
-            correct_answer: Correct answer(s) from Valkey
+            user_answer: User's selected answer(s) - can be "A) Text" or just "A"
+            correct_answer: Correct answer(s) from Valkey - can be "A" or ["A", "C"]
             question_text: The question text
             explanation: Pre-generated explanation
         Returns:
             dict: Result with is_correct and explanation
         """
-        # Normalize answers for comparison
+        # Extract just the letter (A, B, C, D) from answers
+        def extract_letter(answer):
+            """Extract letter from 'A) Text' or 'A' format"""
+            answer_str = str(answer).strip().upper()
+            # If format is "A) Something", extract just "A"
+            if ')' in answer_str:
+                return answer_str.split(')')[0].strip()
+            # If already just a letter, return it
+            return answer_str[0] if answer_str else ''
+        
         def normalize_answer(answer):
+            """Normalize answer to list of letters"""
             if isinstance(answer, list):
-                return sorted([str(a).strip().upper() for a in answer])
-            return str(answer).strip().upper()
+                return sorted([extract_letter(a) for a in answer])
+            return [extract_letter(answer)]
         
         user_normalized = normalize_answer(user_answer)
         correct_normalized = normalize_answer(correct_answer)
         
         is_correct = user_normalized == correct_normalized
         
+        # Format correct answer for display
+        if isinstance(correct_answer, list):
+            display_correct = correct_answer
+        else:
+            display_correct = correct_answer
+        
         return {
             "is_correct": is_correct,
-            "correct_answer": correct_answer,
+            "correct_answer": display_correct,
             "explanation": explanation,
             "user_answer": user_answer
         }

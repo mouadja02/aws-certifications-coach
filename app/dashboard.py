@@ -125,88 +125,87 @@ def show_practice_exam(user):
     # If no exam session is active, show exam setup
     if st.session_state.exam_session_id is None:
         st.info("👇 Configure your practice exam settings and click 'Start Exam' to begin")
-        
-        # Exam settings
-        col1, col2, col3 = st.columns(3)
-        with col1:
+    
+    # Exam settings
+    col1, col2, col3 = st.columns(3)
+    with col1:
             num_questions = st.selectbox("Number of Questions", [5, 10, 15, 20, 30], index=1, key="num_q")
-        with col2:
+    with col2:
             difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1, key="diff")
-        with col3:
+    with col3:
             topic = st.selectbox("Topic", ["All Topics", "EC2", "S3", "VPC", "IAM", "Lambda", "RDS", "CloudFormation", "CloudWatch"], key="topic")
         
-        st.write("---")
+    st.write("---")
+
+    if st.button("🚀 Start Exam", type="primary", use_container_width=True):
+        # Generate unique session ID
+        session_id = f"exam_{user['id']}_{int(datetime.now().timestamp())}"
         
-        if st.button("🚀 Start Exam", type="primary", use_container_width=True):
-            # Generate unique session ID
-            session_id = f"exam_{user['id']}_{int(datetime.now().timestamp())}"
+        # Clear any existing queue
+        valkey.clear_queue(session_id)
+        
+        # Create session data
+        session_data = {
+            "session_id": session_id,
+            "user_id": user["id"],
+            "certification": user["target_certification"],
+            "difficulty": difficulty.lower(),
+            "topic": topic,
+            "total_questions": num_questions,
+            "score": 0,
+            "answers": [],
+            "started_at": datetime.now().isoformat()
+        }
+        
+        # Save session to Valkey
+        if valkey.save_session(session_id, session_data):
+            # Trigger background question generation
+            success = ai_service.trigger_exam_generation(
+                session_id=session_id,
+                user_id=user["id"],
+                certification=user["target_certification"],
+                difficulty=difficulty.lower(),
+                total_questions=num_questions,
+                topic=topic
+            )
             
-            # Clear any existing queue
-            valkey.clear_queue(session_id)
-            
-            # Create session data
-            session_data = {
-                "session_id": session_id,
-                "user_id": user["id"],
-                "certification": user["target_certification"],
-                "difficulty": difficulty.lower(),
-                "topic": topic,
-                "total_questions": num_questions,
-                "score": 0,
-                "answers": [],
-                "started_at": datetime.now().isoformat()
-            }
-            
-            # Save session to Valkey
-            if valkey.save_session(session_id, session_data):
-                # Trigger background question generation
-                success = ai_service.trigger_exam_generation(
-                    session_id=session_id,
-                    user_id=user["id"],
-                    certification=user["target_certification"],
-                    difficulty=difficulty.lower(),
-                    total_questions=num_questions,
-                    topic=topic
-                )
+            if success:
+                st.info("⏳ Generating first question...")
                 
-                if success:
-                    st.info("⏳ Generating first question...")
-                    
-                    # Wait for first question (with timeout)
-                    max_wait = 30  # 30 seconds max
-                    wait_interval = 1  # Check every 1 second
-                    waited = 0
-                    
-                    question_data = None
-                    while waited < max_wait:
-                        question_data = valkey.pop_question(session_id)
-                        print(question_data)
-                        if question_data:
-                            break
-                        time.sleep(wait_interval)
-                        waited += wait_interval
-                    
+                # Wait for first question (with timeout)
+                max_wait = 30  # 30 seconds max
+                wait_interval = 1  # Check every 1 second
+                waited = 0
+                
+                question_data = None
+                while waited < max_wait:
+                    question_data = valkey.pop_question(session_id)
                     if question_data:
-                        # Success! Start exam
-                        st.session_state.exam_session_id = session_id
-                        st.session_state.current_question = question_data
-                        st.session_state.question_number = 1
-                        st.session_state.total_questions = num_questions
-                        st.session_state.exam_score = 0
-                        st.session_state.exam_results = []
-                        st.session_state.show_explanation = False
-                        st.session_state.current_answer_result = None
-                        st.success("✅ Exam started!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Timeout waiting for first question. Please try again.")
-                        valkey.delete_session(session_id)
+                        break
+                    time.sleep(wait_interval)
+                    waited += wait_interval
+                
+                if question_data:
+                    # Success! Start exam
+                    st.session_state.exam_session_id = session_id
+                    st.session_state.current_question = question_data
+                    st.session_state.question_number = 1
+                    st.session_state.total_questions = num_questions
+                    st.session_state.exam_score = 0
+                    st.session_state.exam_results = []
+                    st.session_state.show_explanation = False
+                    st.session_state.current_answer_result = None
+                    st.success("✅ Exam started!")
+                    st.rerun()
                 else:
-                    st.error("❌ Could not start exam. Check n8n webhook configuration.")
+                    st.error("❌ Timeout waiting for first question. Please try again.")
                     valkey.delete_session(session_id)
             else:
-                st.error("❌ Could not connect to Valkey. Check configuration.")
-    
+                st.error("❌ Could not start exam. Check n8n webhook configuration.")
+                valkey.delete_session(session_id)
+        else:
+            st.error("❌ Could not connect to Valkey. Check configuration.")
+
     # If exam session is active, show current question
     else:
         session_id = st.session_state.exam_session_id
@@ -322,7 +321,7 @@ def show_practice_exam(user):
                             })
                             
                             st.rerun()
-            
+        
             # Show explanation after answer is checked
             else:
                 result = st.session_state.current_answer_result
@@ -423,13 +422,13 @@ def show_practice_exam(user):
                             
                             # Clean up Valkey
                             valkey.delete_session(session_id)
-                                            
+                            
                             st.write("---")
                             col1, col2, col3 = st.columns(3)
                             col1.metric("Final Score", f"{score_percentage:.1f}%")
                             col2.metric("Correct", f"{st.session_state.exam_score}/{st.session_state.total_questions}")
                             col3.metric("Pass", "✅ Yes" if score_percentage >= 70 else "❌ No")
-
+            
                             st.write("---")
                             st.subheader("📊 Question Review")
                             
