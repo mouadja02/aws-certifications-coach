@@ -730,18 +730,13 @@ def show_practice_exam(user):
                             # Store session_id before clearing state
                             session_id_to_cleanup = st.session_state.exam_session_id
                             
-                            # Clean up - notify n8n to stop generating questions
-                            try:
-                                data = {
-                                    "action": "quit_session",
-                                    "session_id": session_id_to_cleanup,
-                                    "timestamp": datetime.utcnow().isoformat()
-                                }
-                                result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                                if result and result.get("error"):
-                                    print(f"Warning: Could not notify n8n: {result.get('error')}")
-                            except Exception as e:
-                                print(f"Warning: Failed to notify n8n about session cleanup: {e}")
+                            data = {
+                                "action": "quit_session",
+                                "session_id": session_id_to_cleanup,
+                                "timestamp": datetime.utcnow().isoformat()
+                            }
+                            result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+                            
                             
                             # Now reset all exam session state
                             st.session_state.exam_session_id = None
