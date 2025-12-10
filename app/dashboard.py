@@ -603,161 +603,160 @@ def show_practice_exam(user):
                                 st.warning("⏳ Waiting for next question... (generating in background)")
                                 time.sleep(2)
                                 st.rerun()
-                    else:
-                        if st.button("🏁 Finish Exam", type="primary", use_container_width=True):
-                            # Mark exam as finished and save/cleanup ONCE
-                            if not st.session_state.exam_finished:
-                                # Calculate final score
-                                score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
-                                
-                                # Save to database BEFORE clearing anything
-                                try:
-                                    from database import execute_update
-                                    session_data = valkey.get_session(session_id)
-                                    if session_data:
-                                        query = f"""
-                                        INSERT INTO exam_sessions (
-                                            session_id, user_id, certification, difficulty, topic,
-                                            total_questions, correct_answers, incorrect_answers,
-                                            percentage, passed, started_at, completed_at, duration_minutes
-                                        ) VALUES (
-                                            '{session_id}',
-                                            {user['id']},
-                                            '{user['target_certification']}',
-                                            '{session_data.get('difficulty', 'medium')}',
-                                            '{session_data.get('topic', 'All Topics')}',
-                                            {st.session_state.total_questions},
-                                            {st.session_state.exam_score},
-                                            {st.session_state.total_questions - st.session_state.exam_score},
-                                            {score_percentage},
-                                            {str(score_percentage >= 70).upper()},
-                                            '{session_data.get('started_at')}',
-                                            '{datetime.now().isoformat()}',
-                                            {int((datetime.now() - datetime.fromisoformat(session_data.get('started_at'))).seconds / 60)}
-                                        )
-                                        """
-                                        execute_update(query)
-                                except Exception as e:
-                                    print(f"Could not save results to database: {e}")
-                                
-                                # Clean up Valkey
-                                try:
-                                    valkey.delete_session(session_id)
-                                except Exception as e:
-                                    print(f"Could not delete Valkey session: {e}")
-                                
-                                # Mark as finished
-                                st.session_state.exam_finished = True
-                            
-                            # Show confetti celebration
-                            show_confetti()
-                            st.markdown("""
-                            <div class="glass-card" style="text-align: center; padding: 3rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(255, 153, 0, 0.1) 100%);">
-                                <div style="font-size: 5rem; margin-bottom: 1rem; animation: bounce 1s infinite;">🎉</div>
-                                <h1 style="color: #10b981; margin-bottom: 0.5rem;">Exam Complete!</h1>
-                                <p style="color: #6b7280; font-size: 1.2rem;">Great job! Let's see how you did...</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            st.write("")
-                            
-                            # Calculate final score (again for display)
+                    elif st.button("🏁 Finish Exam", type="primary", use_container_width=True):
+                        # Mark exam as finished and save/cleanup ONCE
+                        if not st.session_state.exam_finished:
+                            # Calculate final score
                             score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
                             
-                            # Score display with premium styling
-                            pass_status = score_percentage >= 70
-                            status_color = "#10b981" if pass_status else "#ef4444"
-                            status_text = "PASSED ✅" if pass_status else "NEEDS IMPROVEMENT 📈"
+                            # Save to database BEFORE clearing anything
+                            try:
+                                from database import execute_update
+                                session_data = valkey.get_session(session_id)
+                                if session_data:
+                                    query = f"""
+                                    INSERT INTO exam_sessions (
+                                        session_id, user_id, certification, difficulty, topic,
+                                        total_questions, correct_answers, incorrect_answers,
+                                        percentage, passed, started_at, completed_at, duration_minutes
+                                    ) VALUES (
+                                        '{session_id}',
+                                        {user['id']},
+                                        '{user['target_certification']}',
+                                        '{session_data.get('difficulty', 'medium')}',
+                                        '{session_data.get('topic', 'All Topics')}',
+                                        {st.session_state.total_questions},
+                                        {st.session_state.exam_score},
+                                        {st.session_state.total_questions - st.session_state.exam_score},
+                                        {score_percentage},
+                                        {str(score_percentage >= 70).upper()},
+                                        '{session_data.get('started_at')}',
+                                        '{datetime.now().isoformat()}',
+                                        {int((datetime.now() - datetime.fromisoformat(session_data.get('started_at'))).seconds / 60)}
+                                    )
+                                    """
+                                    execute_update(query)
+                            except Exception as e:
+                                print(f"Could not save results to database: {e}")
                             
-                            st.markdown(f"""
-                            <div class="glass-card" style="text-align: center; padding: 2rem; border: 3px solid {status_color};">
-                                <div style="font-size: 1rem; color: #6b7280; margin-bottom: 0.5rem;">FINAL SCORE</div>
-                                <div style="font-size: 5rem; font-weight: 800; color: {status_color};">{score_percentage:.0f}%</div>
-                                <div style="font-size: 1.5rem; font-weight: 700; color: {status_color}; margin-top: 1rem;">{status_text}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            # Clean up Valkey
+                            try:
+                                valkey.delete_session(session_id)
+                            except Exception as e:
+                                print(f"Could not delete Valkey session: {e}")
                             
-                            st.write("")
+                            # Mark as finished
+                            st.session_state.exam_finished = True
+                        
+                        # Show confetti celebration
+                        show_confetti()
+                        st.markdown("""
+                        <div class="glass-card" style="text-align: center; padding: 3rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(255, 153, 0, 0.1) 100%);">
+                            <div style="font-size: 5rem; margin-bottom: 1rem; animation: bounce 1s infinite;">🎉</div>
+                            <h1 style="color: #10b981; margin-bottom: 0.5rem;">Exam Complete!</h1>
+                            <p style="color: #6b7280; font-size: 1.2rem;">Great job! Let's see how you did...</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.write("")
+                        
+                        # Calculate final score (again for display)
+                        score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
+                        
+                        # Score display with premium styling
+                        pass_status = score_percentage >= 70
+                        status_color = "#10b981" if pass_status else "#ef4444"
+                        status_text = "PASSED ✅" if pass_status else "NEEDS IMPROVEMENT 📈"
+                        
+                        st.markdown(f"""
+                        <div class="glass-card" style="text-align: center; padding: 2rem; border: 3px solid {status_color};">
+                            <div style="font-size: 1rem; color: #6b7280; margin-bottom: 0.5rem;">FINAL SCORE</div>
+                            <div style="font-size: 5rem; font-weight: 800; color: {status_color};">{score_percentage:.0f}%</div>
+                            <div style="font-size: 1.5rem; font-weight: 700; color: {status_color}; margin-top: 1rem;">{status_text}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.write("")
+                        
+                        # Detailed stats
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.markdown(create_metric_card("✅", "Correct", f"{st.session_state.exam_score}", None), unsafe_allow_html=True)
+                        with col2:
+                            st.markdown(create_metric_card("❌", "Incorrect", f"{st.session_state.total_questions - st.session_state.exam_score}", None), unsafe_allow_html=True)
+                        with col3:
+                            st.markdown(create_metric_card("📊", "Total", f"{st.session_state.total_questions}", None), unsafe_allow_html=True)
+                        
+                        st.write("")
+                        st.markdown('<h2 style="margin: 2rem 0 1rem 0;">📊 Detailed Review</h2>', unsafe_allow_html=True)
+                        
+                        for i, result in enumerate(st.session_state.exam_results, 1):
+                            status_icon = "✅" if result["is_correct"] else "❌"
+                            status_color = "#10b981" if result["is_correct"] else "#ef4444"
+                            status_text = "CORRECT" if result["is_correct"] else "INCORRECT"
                             
-                            # Detailed stats
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.markdown(create_metric_card("✅", "Correct", f"{st.session_state.exam_score}", None), unsafe_allow_html=True)
-                            with col2:
-                                st.markdown(create_metric_card("❌", "Incorrect", f"{st.session_state.total_questions - st.session_state.exam_score}", None), unsafe_allow_html=True)
-                            with col3:
-                                st.markdown(create_metric_card("📊", "Total", f"{st.session_state.total_questions}", None), unsafe_allow_html=True)
-                            
-                            st.write("")
-                            st.markdown('<h2 style="margin: 2rem 0 1rem 0;">📊 Detailed Review</h2>', unsafe_allow_html=True)
-                            
-                            for i, result in enumerate(st.session_state.exam_results, 1):
-                                status_icon = "✅" if result["is_correct"] else "❌"
-                                status_color = "#10b981" if result["is_correct"] else "#ef4444"
-                                status_text = "CORRECT" if result["is_correct"] else "INCORRECT"
-                                
-                                with st.expander(f"{status_icon} Question {i} - {result['question'][:60]}..."):
-                                    st.markdown(f"""
-                                    <div class="glass-card" style="border-left: 4px solid {status_color};">
-                                        <div style="display: inline-block; background: {status_color}; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 1rem;">
-                                            {status_text}
-                                        </div>
-                                        <h4 style="color: #232F3E; margin-bottom: 1rem;">Question:</h4>
-                                        <p style="color: #4b5563; line-height: 1.6; margin-bottom: 1.5rem;">{result['question']}</p>
-                                        
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-                                            <div>
-                                                <h4 style="color: #6b7280; margin-bottom: 0.5rem;">Your Answer:</h4>
-                                                <div style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 0.5rem; color: #4b5563;">
-                                                    {result['user_answer']}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <h4 style="color: #6b7280; margin-bottom: 0.5rem;">Correct Answer:</h4>
-                                                <div style="background: rgba(16, 185, 129, 0.1); padding: 1rem; border-radius: 0.5rem; color: #4b5563;">
-                                                    {result['correct_answer']}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <h4 style="color: #FF9900; margin-bottom: 0.5rem;">Explanation:</h4>
-                                        <p style="color: #4b5563; line-height: 1.6; background: rgba(255, 153, 0, 0.05); padding: 1rem; border-radius: 0.5rem;">
-                                            {result['explanation']}
-                                        </p>
+                            with st.expander(f"{status_icon} Question {i} - {result['question'][:60]}..."):
+                                st.markdown(f"""
+                                <div class="glass-card" style="border-left: 4px solid {status_color};">
+                                    <div style="display: inline-block; background: {status_color}; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 1rem;">
+                                        {status_text}
                                     </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            st.write("")
-                            if st.button("🔄 Take Another Exam", use_container_width=True, type="primary"):
-                                # Store session_id before clearing state
-                                session_id_to_cleanup = st.session_state.exam_session_id
-                                
-                                # Clean up - notify n8n to stop generating questions
-                                try:
-                                    data = {
-                                        "action": "quit_session",
-                                        "session_id": session_id_to_cleanup,
-                                        "timestamp": datetime.utcnow().isoformat()
-                                    }
-                                    result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                                    if result and result.get("error"):
-                                        print(f"Warning: Could not notify n8n: {result.get('error')}")
-                                except Exception as e:
-                                    print(f"Warning: Failed to notify n8n about session cleanup: {e}")
-                                
-                                # Now reset all exam session state
-                                st.session_state.exam_session_id = None
-                                st.session_state.current_question = None
-                                st.session_state.question_number = 0
-                                st.session_state.exam_score = 0
-                                st.session_state.exam_results = []
-                                st.session_state.show_explanation = False
-                                st.session_state.current_answer_result = None
-                                st.session_state.exam_finished = False
-                                
-                                # Show success message
-                                show_toast("Ready for another exam! Good luck! 🚀", type="success")
-                                st.rerun()
-        
+                                    <h4 style="color: #232F3E; margin-bottom: 1rem;">Question:</h4>
+                                    <p style="color: #4b5563; line-height: 1.6; margin-bottom: 1.5rem;">{result['question']}</p>
+                                    
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                                        <div>
+                                            <h4 style="color: #6b7280; margin-bottom: 0.5rem;">Your Answer:</h4>
+                                            <div style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 0.5rem; color: #4b5563;">
+                                                {result['user_answer']}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 style="color: #6b7280; margin-bottom: 0.5rem;">Correct Answer:</h4>
+                                            <div style="background: rgba(16, 185, 129, 0.1); padding: 1rem; border-radius: 0.5rem; color: #4b5563;">
+                                                {result['correct_answer']}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <h4 style="color: #FF9900; margin-bottom: 0.5rem;">Explanation:</h4>
+                                    <p style="color: #4b5563; line-height: 1.6; background: rgba(255, 153, 0, 0.05); padding: 1rem; border-radius: 0.5rem;">
+                                        {result['explanation']}
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        
+                        st.write("")
+                    elif st.button("🔄 Take Another Exam", use_container_width=True, type="primary"):
+                        # Store session_id before clearing state
+                        session_id_to_cleanup = st.session_state.exam_session_id
+                        
+                        # Clean up - notify n8n to stop generating questions
+                        try:
+                            data = {
+                                "action": "quit_session",
+                                "session_id": session_id_to_cleanup,
+                                "timestamp": datetime.utcnow().isoformat()
+                            }
+                            result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+                            if result and result.get("error"):
+                                print(f"Warning: Could not notify n8n: {result.get('error')}")
+                        except Exception as e:
+                            print(f"Warning: Failed to notify n8n about session cleanup: {e}")
+                        
+                        # Now reset all exam session state
+                        st.session_state.exam_session_id = None
+                        st.session_state.current_question = None
+                        st.session_state.question_number = 0
+                        st.session_state.exam_score = 0
+                        st.session_state.exam_results = []
+                        st.session_state.show_explanation = False
+                        st.session_state.current_answer_result = None
+                        st.session_state.exam_finished = False
+                        
+                        # Show success message
+                        show_toast("Ready for another exam! Good luck! 🚀", type="success")
+                        st.rerun()
+    
             # Option to quit exam early (only show during active exam, not after finish)
             if st.session_state.current_question and not (
                 st.session_state.question_number >= st.session_state.total_questions 
