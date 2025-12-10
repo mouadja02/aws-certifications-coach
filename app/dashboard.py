@@ -170,7 +170,7 @@ def show_ai_chat(user):
                 )
                 save_chat_message(user["id"], prompt, response_text)
         except Exception as e:
-            logger.info(f"Error: {e}")
+            logger.error(f"Error: {e}")
             response_text = "Sorry, I'm having trouble processing your question. Please try again."
         
         st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -641,13 +641,13 @@ def show_practice_exam(user):
                                     """
                                     execute_update(query)
                             except Exception as e:
-                                logger.info(f"Could not save results to database: {e}")
+                                logger.error(f"Could not save results to database: {e}")
                             
                             # Clean up Valkey
                             try:
                                 valkey.delete_session(session_id)
                             except Exception as e:
-                                logger.info(f"Could not delete Valkey session: {e}")
+                                logger.error(f"Could not delete Valkey session: {e}")
                             
                             # Mark as finished
                             st.session_state.exam_finished = True
@@ -739,10 +739,10 @@ def show_practice_exam(user):
                                 "session_id": session_id_to_cleanup,
                                 "timestamp": datetime.utcnow().isoformat()
                             }
-                            logger.info(ai_service.exam_webhook)
-                            logger.info(data)
+                            st.write("**Webhook URL:**", ai_service.exam_webhook)
+                            st.write("**Data:**", data)
                             result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                            logger.info(result)
+                            st.write("**Result:**", result)
                             
                             # Now reset all exam session state
                             st.session_state.exam_session_id = None
@@ -775,9 +775,9 @@ def show_practice_exam(user):
                         }
                         result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
                         if result and result.get("error"):
-                            logger.info(f"Warning: Could not notify n8n: {result.get('error')}")
+                            logger.error(f"Warning: Could not notify n8n: {result.get('error')}")
                     except Exception as e:
-                        logger.info(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking quit exam button")
+                        logger.error(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking quit exam button")
                     
                     valkey.delete_session(session_id)
                     st.session_state.exam_session_id = None
