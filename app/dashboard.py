@@ -735,8 +735,10 @@ def show_practice_exam(user):
                                 "session_id": session_id_to_cleanup,
                                 "timestamp": datetime.utcnow().isoformat()
                             }
+                            print(ai_service.exam_webhook)
+                            print(data)
                             result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                            
+                            print(result)
                             
                             # Now reset all exam session state
                             st.session_state.exam_session_id = None
@@ -748,9 +750,9 @@ def show_practice_exam(user):
                             st.session_state.current_answer_result = None
                             st.session_state.exam_finished = False
                             
-                            # Show success message
-                            show_toast("Ready for another exam! Good luck! 🚀", type="success")
-                            st.rerun()
+                        # Show success message
+                        show_toast("Ready for another exam! Good luck! 🚀", type="success")
+                        st.rerun()
     
             # Option to quit exam early (only show during active exam, not after finish)
             if st.session_state.current_question and not (
