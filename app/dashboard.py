@@ -10,6 +10,10 @@ import os
 import json
 from datetime import datetime
 from streamlit_option_menu import option_menu
+import logging
+
+logger = logging.getLogger(__name__)
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log
@@ -166,7 +170,7 @@ def show_ai_chat(user):
                 )
                 save_chat_message(user["id"], prompt, response_text)
         except Exception as e:
-            print(f"Error: {e}")
+            logger.info(f"Error: {e}")
             response_text = "Sorry, I'm having trouble processing your question. Please try again."
         
         st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -637,13 +641,13 @@ def show_practice_exam(user):
                                     """
                                     execute_update(query)
                             except Exception as e:
-                                print(f"Could not save results to database: {e}")
+                                logger.info(f"Could not save results to database: {e}")
                             
                             # Clean up Valkey
                             try:
                                 valkey.delete_session(session_id)
                             except Exception as e:
-                                print(f"Could not delete Valkey session: {e}")
+                                logger.info(f"Could not delete Valkey session: {e}")
                             
                             # Mark as finished
                             st.session_state.exam_finished = True
@@ -735,10 +739,10 @@ def show_practice_exam(user):
                                 "session_id": session_id_to_cleanup,
                                 "timestamp": datetime.utcnow().isoformat()
                             }
-                            print(ai_service.exam_webhook)
-                            print(data)
+                            logger.info(ai_service.exam_webhook)
+                            logger.info(data)
                             result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                            print(result)
+                            logger.info(result)
                             
                             # Now reset all exam session state
                             st.session_state.exam_session_id = None
@@ -750,9 +754,9 @@ def show_practice_exam(user):
                             st.session_state.current_answer_result = None
                             st.session_state.exam_finished = False
                             
-                        # Show success message
-                        show_toast("Ready for another exam! Good luck! 🚀", type="success")
-                        st.rerun()
+                            # Show success message
+                            show_toast("Ready for another exam! Good luck! 🚀", type="success")
+                            st.rerun()
     
             # Option to quit exam early (only show during active exam, not after finish)
             if st.session_state.current_question and not (
@@ -771,9 +775,9 @@ def show_practice_exam(user):
                         }
                         result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
                         if result and result.get("error"):
-                            print(f"Warning: Could not notify n8n: {result.get('error')}")
+                            logger.info(f"Warning: Could not notify n8n: {result.get('error')}")
                     except Exception as e:
-                        print(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking quit exam button")
+                        logger.info(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking quit exam button")
                     
                     valkey.delete_session(session_id)
                     st.session_state.exam_session_id = None
