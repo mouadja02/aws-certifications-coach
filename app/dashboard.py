@@ -222,6 +222,8 @@ def show_practice_exam(user):
         st.session_state.show_explanation = False
     if "current_answer_result" not in st.session_state:
         st.session_state.current_answer_result = None
+    if "exam_finished" not in st.session_state:
+        st.session_state.exam_finished = False
     
     # Get Valkey client
     valkey = get_valkey_client()
@@ -603,6 +605,50 @@ def show_practice_exam(user):
                                 st.rerun()
                     else:
                         if st.button("🏁 Finish Exam", type="primary", use_container_width=True):
+                            # Mark exam as finished and save/cleanup ONCE
+                            if not st.session_state.exam_finished:
+                                # Calculate final score
+                                score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
+                                
+                                # Save to database BEFORE clearing anything
+                                try:
+                                    from database import execute_update
+                                    session_data = valkey.get_session(session_id)
+                                    if session_data:
+                                        query = f"""
+                                        INSERT INTO exam_sessions (
+                                            session_id, user_id, certification, difficulty, topic,
+                                            total_questions, correct_answers, incorrect_answers,
+                                            percentage, passed, started_at, completed_at, duration_minutes
+                                        ) VALUES (
+                                            '{session_id}',
+                                            {user['id']},
+                                            '{user['target_certification']}',
+                                            '{session_data.get('difficulty', 'medium')}',
+                                            '{session_data.get('topic', 'All Topics')}',
+                                            {st.session_state.total_questions},
+                                            {st.session_state.exam_score},
+                                            {st.session_state.total_questions - st.session_state.exam_score},
+                                            {score_percentage},
+                                            {str(score_percentage >= 70).upper()},
+                                            '{session_data.get('started_at')}',
+                                            '{datetime.now().isoformat()}',
+                                            {int((datetime.now() - datetime.fromisoformat(session_data.get('started_at'))).seconds / 60)}
+                                        )
+                                        """
+                                        execute_update(query)
+                                except Exception as e:
+                                    print(f"Could not save results to database: {e}")
+                                
+                                # Clean up Valkey
+                                try:
+                                    valkey.delete_session(session_id)
+                                except Exception as e:
+                                    print(f"Could not delete Valkey session: {e}")
+                                
+                                # Mark as finished
+                                st.session_state.exam_finished = True
+                            
                             # Show confetti celebration
                             show_confetti()
                             st.markdown("""
@@ -614,7 +660,7 @@ def show_practice_exam(user):
                             """, unsafe_allow_html=True)
                             st.write("")
                             
-                            # Calculate final score
+                            # Calculate final score (again for display)
                             score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
                             
                             # Score display with premium styling
@@ -640,37 +686,6 @@ def show_practice_exam(user):
                                 st.markdown(create_metric_card("❌", "Incorrect", f"{st.session_state.total_questions - st.session_state.exam_score}", None), unsafe_allow_html=True)
                             with col3:
                                 st.markdown(create_metric_card("📊", "Total", f"{st.session_state.total_questions}", None), unsafe_allow_html=True)
-                            
-                            # Save to database (save session results)
-                            try:
-                                from database import execute_update
-                                query = f"""
-                                INSERT INTO exam_sessions (
-                                    session_id, user_id, certification, difficulty, topic,
-                                    total_questions, correct_answers, incorrect_answers,
-                                    percentage, passed, started_at, completed_at, duration_minutes
-                                ) VALUES (
-                                    '{session_id}',
-                                    {user['id']},
-                                    '{user['target_certification']}',
-                                    '{valkey.get_session(session_id).get('difficulty', 'medium')}',
-                                    '{valkey.get_session(session_id).get('topic', 'All Topics')}',
-                                    {st.session_state.total_questions},
-                                    {st.session_state.exam_score},
-                                    {st.session_state.total_questions - st.session_state.exam_score},
-                                    {score_percentage},
-                                    {str(score_percentage >= 70).upper()},
-                                    '{valkey.get_session(session_id).get('started_at')}',
-                                    '{datetime.now().isoformat()}',
-                                    {int((datetime.now() - datetime.fromisoformat(valkey.get_session(session_id).get('started_at'))).seconds / 60)}
-                                )
-                                """
-                                execute_update(query)
-                            except Exception as e:
-                                st.warning(f"Could not save results to database: {e}")
-                            
-                            # Clean up Valkey
-                            valkey.delete_session(session_id)
                             
                             st.write("")
                             st.markdown('<h2 style="margin: 2rem 0 1rem 0;">📊 Detailed Review</h2>', unsafe_allow_html=True)
@@ -711,22 +726,25 @@ def show_practice_exam(user):
                                     </div>
                                     """, unsafe_allow_html=True)
                             
-                            st.write("---")
-                            if st.button("🔄 Take Another Exam", use_container_width=True):
-                                # Reset all exam session state  
+                            st.write("")
+                            if st.button("🔄 Take Another Exam", use_container_width=True, type="primary"):
+                                # Store session_id before clearing state
+                                session_id_to_cleanup = st.session_state.exam_session_id
+                                
                                 # Clean up - notify n8n to stop generating questions
                                 try:
                                     data = {
                                         "action": "quit_session",
-                                        "session_id": st.session_state.exam_session_id,
+                                        "session_id": session_id_to_cleanup,
                                         "timestamp": datetime.utcnow().isoformat()
                                     }
                                     result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
                                     if result and result.get("error"):
                                         print(f"Warning: Could not notify n8n: {result.get('error')}")
                                 except Exception as e:
-                                    print(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking take another exam button")
+                                    print(f"Warning: Failed to notify n8n about session cleanup: {e}")
                                 
+                                # Now reset all exam session state
                                 st.session_state.exam_session_id = None
                                 st.session_state.current_question = None
                                 st.session_state.question_number = 0
@@ -734,6 +752,10 @@ def show_practice_exam(user):
                                 st.session_state.exam_results = []
                                 st.session_state.show_explanation = False
                                 st.session_state.current_answer_result = None
+                                st.session_state.exam_finished = False
+                                
+                                # Show success message
+                                show_toast("Ready for another exam! Good luck! 🚀", type="success")
                                 st.rerun()
         
             # Option to quit exam early (only show during active exam, not after finish)
@@ -765,6 +787,7 @@ def show_practice_exam(user):
                     st.session_state.exam_results = []
                     st.session_state.show_explanation = False
                     st.session_state.current_answer_result = None
+                    st.session_state.exam_finished = False
                     st.rerun()
 
 
@@ -1302,7 +1325,10 @@ def show_dashboard():
         </div>
         """, unsafe_allow_html=True)
         
-        # User Profile Card
+        # User Profile Card - Fixed version without code snippet
+        user_name_display = user['name'] if len(user['name']) <= 20 else user['name'][:20] + "..."
+        cert_display = user['target_certification'] if len(user['target_certification']) <= 35 else user['target_certification'][:35] + "..."
+        
         st.markdown(f"""
         <div style="
             background: rgba(255, 255, 255, 0.1);
@@ -1328,7 +1354,7 @@ def show_dashboard():
                 </div>
                 <div style="flex: 1;">
                     <div style="color: white; font-weight: 700; font-size: 1.1rem; margin-bottom: 0.25rem;">
-                        {user['name'][:15]}...
+                        {user_name_display}
                     </div>
                     <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.875rem;">
                         Level {int(xp / 100) + 1}
@@ -1341,7 +1367,7 @@ def show_dashboard():
                     🎯 Target Certification
                 </div>
                 <div style="color: white; font-weight: 600; font-size: 0.9rem; line-height: 1.3;">
-                    {user['target_certification'][:30]}...
+                    {cert_display}
                 </div>
             </div>
             
@@ -1375,7 +1401,7 @@ def show_dashboard():
                 "container": {"padding": "0", "background-color": "transparent"},
                 "icon": {"color": "#FF9900", "font-size": "1.2rem"}, 
                 "nav-link": {
-                    "color": "rgba(255, 255, 255, 0.8)",
+                    "color": "#E5E7EB",
                     "font-size": "0.95rem",
                     "font-weight": "500",
                     "text-align": "left",
@@ -1383,6 +1409,7 @@ def show_dashboard():
                     "padding": "0.75rem 1rem",
                     "border-radius": "0.5rem",
                     "transition": "all 0.3s ease",
+                    "background-color": "rgba(255, 255, 255, 0.05)",
                 },
                 "nav-link-selected": {
                     "background": "linear-gradient(135deg, #FF9900 0%, #EC7211 100%)",

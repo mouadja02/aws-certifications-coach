@@ -85,12 +85,11 @@ def get_custom_css():
        GLOBAL STYLES
        ============================================ */
     .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #FF9900 100%);
-        background-attachment: fixed;
+        background: #ffffff;
     }
     
     .main {
-        background: transparent;
+        background: #ffffff;
     }
     
     /* Hide Streamlit default elements */
