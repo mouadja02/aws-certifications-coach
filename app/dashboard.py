@@ -726,36 +726,36 @@ def show_practice_exam(user):
                                 """, unsafe_allow_html=True)
                         
                         st.write("")
-                    elif st.button("🔄 Take Another Exam", use_container_width=True, type="primary"):
-                        # Store session_id before clearing state
-                        session_id_to_cleanup = st.session_state.exam_session_id
-                        
-                        # Clean up - notify n8n to stop generating questions
-                        try:
-                            data = {
-                                "action": "quit_session",
-                                "session_id": session_id_to_cleanup,
-                                "timestamp": datetime.utcnow().isoformat()
-                            }
-                            result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                            if result and result.get("error"):
-                                print(f"Warning: Could not notify n8n: {result.get('error')}")
-                        except Exception as e:
-                            print(f"Warning: Failed to notify n8n about session cleanup: {e}")
-                        
-                        # Now reset all exam session state
-                        st.session_state.exam_session_id = None
-                        st.session_state.current_question = None
-                        st.session_state.question_number = 0
-                        st.session_state.exam_score = 0
-                        st.session_state.exam_results = []
-                        st.session_state.show_explanation = False
-                        st.session_state.current_answer_result = None
-                        st.session_state.exam_finished = False
-                        
-                        # Show success message
-                        show_toast("Ready for another exam! Good luck! 🚀", type="success")
-                        st.rerun()
+                        if st.button("🔄 Take Another Exam", use_container_width=True, type="primary"):
+                            # Store session_id before clearing state
+                            session_id_to_cleanup = st.session_state.exam_session_id
+                            
+                            # Clean up - notify n8n to stop generating questions
+                            try:
+                                data = {
+                                    "action": "quit_session",
+                                    "session_id": session_id_to_cleanup,
+                                    "timestamp": datetime.utcnow().isoformat()
+                                }
+                                result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+                                if result and result.get("error"):
+                                    print(f"Warning: Could not notify n8n: {result.get('error')}")
+                            except Exception as e:
+                                print(f"Warning: Failed to notify n8n about session cleanup: {e}")
+                            
+                            # Now reset all exam session state
+                            st.session_state.exam_session_id = None
+                            st.session_state.current_question = None
+                            st.session_state.question_number = 0
+                            st.session_state.exam_score = 0
+                            st.session_state.exam_results = []
+                            st.session_state.show_explanation = False
+                            st.session_state.current_answer_result = None
+                            st.session_state.exam_finished = False
+                            
+                            # Show success message
+                            show_toast("Ready for another exam! Good luck! 🚀", type="success")
+                            st.rerun()
     
             # Option to quit exam early (only show during active exam, not after finish)
             if st.session_state.current_question and not (
