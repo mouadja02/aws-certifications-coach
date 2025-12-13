@@ -51,7 +51,6 @@ class AIService:
                 response = requests.post(
                     webhook_url,
                     json=data,
-                    timeout=30,
                     headers={"Content-Type": "application/json"}
                 )
                 

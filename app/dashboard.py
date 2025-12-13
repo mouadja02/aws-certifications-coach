@@ -43,7 +43,7 @@ def show_ai_chat(user):
     """Premium AI Chat Interface with stunning visuals"""
     
     # Header
-    st.markdown(f"""
+    st.markdown(f'''
     <div class="glass-container" style="text-align: center; padding: 2rem;">
         <div style="font-size: 4rem; margin-bottom: 0.5rem;">🤖</div>
         <h1 style="margin-bottom: 0.5rem;">AI Study Coach</h1>
@@ -51,7 +51,7 @@ def show_ai_chat(user):
             Your personal AI assistant for <strong style="color: #FF9900;">{user['target_certification']}</strong>
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
     st.write("")
     
@@ -92,7 +92,7 @@ def show_ai_chat(user):
     # Display chat history with premium styling
     for i, message in enumerate(st.session_state.messages):
         if message["role"] == "user":
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="
                 margin-left: 20%;
                 background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
@@ -118,9 +118,9 @@ def show_ai_chat(user):
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
         else:
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="
                 margin-right: 20%;
                 background: linear-gradient(135deg, rgba(255, 153, 0, 0.05) 0%, rgba(236, 114, 17, 0.05) 100%);
@@ -146,7 +146,7 @@ def show_ai_chat(user):
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
         st.write("")
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -170,7 +170,7 @@ def show_ai_chat(user):
                 )
                 save_chat_message(user["id"], prompt, response_text)
         except Exception as e:
-            logger.error(f"Error: {e}")
+            print(f"Error: {e}")
             response_text = "Sorry, I'm having trouble processing your question. Please try again."
         
         st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -179,7 +179,7 @@ def show_ai_chat(user):
     # Chat tips
     st.write("")
     with st.expander("💡 Tips for Better Answers"):
-        st.markdown("""
+        st.markdown('''
         <div class="glass-card">
             <h4 style="color: #FF9900; margin-bottom: 1rem;">Get the most out of your AI coach:</h4>
             <ul style="color: #6b7280; line-height: 2;">
@@ -190,22 +190,22 @@ def show_ai_chat(user):
                 <li><strong>Clarify doubts:</strong> "I don't understand how X works, explain it simply"</li>
             </ul>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
 
 def show_practice_exam(user):
     """Premium Practice Exam Interface with immersive experience"""
     
     # Header
-    st.markdown(f"""
+    st.markdown(f'''
     <div class="glass-container" style="text-align: center; padding: 2rem;">
         <div style="font-size: 4rem; margin-bottom: 0.5rem;">📝</div>
         <h1 style="margin-bottom: 0.5rem;">Practice Exams</h1>
         <p style="color: #6b7280; font-size: 1.1rem;">
-            Prepare for <strong style="color: #FF9900;">{user['target_certification']}</strong> with AI-generated questions
+            Prepare for <strong style="color: #FF9900;">{user["target_certification"]}</strong> with AI-generated questions
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
     st.write("")
     
@@ -233,45 +233,49 @@ def show_practice_exam(user):
     valkey = get_valkey_client()
     ai_service = AIService()
     
-    # If no exam session is active, show premium exam setup
+    # Initialize done flag for cleanup logic
+    done = False
+    
+    # If no exam session is active, show exam setup
     if st.session_state.exam_session_id is None:
-        st.markdown("""
+        done = False
+        st.markdown('''
         <div class="glass-card" style="text-align: center; padding: 2rem; margin-bottom: 2rem;">
             <div style="font-size: 3rem; margin-bottom: 1rem;">⚙️</div>
             <h3 style="color: #232F3E; margin-bottom: 1rem;">Configure Your Exam</h3>
             <p style="color: #6b7280;">Customize your practice exam to match your study goals</p>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
         
         # Exam settings with premium cards
         col1, col2, col3 = st.columns(3, gap="large")
         
         with col1:
-            st.markdown("""
+            st.markdown('''
             <div class="glass-card" style="text-align: center; padding: 1rem;">
                 <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔢</div>
                 <div style="font-weight: 700; color: #232F3E; margin-bottom: 0.5rem;">Questions</div>
             </div>
-            """, unsafe_allow_html=True)
-            num_questions = st.selectbox("", [5, 10, 15, 20, 30, 40, 50], index=1, key="num_q", label_visibility="collapsed")
+            ''', unsafe_allow_html=True)
+            num_questions = st.selectbox("Number of Questions", [2, 5, 10, 15, 20, 30, 40, 50], index=1, key="num_q", label_visibility="collapsed")
         
         with col2:
-            st.markdown("""
+            st.markdown('''
             <div class="glass-card" style="text-align: center; padding: 1rem;">
                 <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚡</div>
                 <div style="font-weight: 700; color: #232F3E; margin-bottom: 0.5rem;">Difficulty</div>
             </div>
-            """, unsafe_allow_html=True)
-            difficulty = st.selectbox("", ["Easy", "Medium", "Hard"], index=1, key="diff", label_visibility="collapsed")
+            ''', unsafe_allow_html=True)
+            difficulty = st.selectbox("Difficulty Level", ["Easy", "Medium", "Hard"], index=1, key="diff", label_visibility="collapsed")
         
         with col3:
-            st.markdown("""
+            st.markdown('''
             <div class="glass-card" style="text-align: center; padding: 1rem;">
                 <div style="font-size: 2rem; margin-bottom: 0.5rem;">📚</div>
                 <div style="font-weight: 700; color: #232F3E; margin-bottom: 0.5rem;">Topic</div>
             </div>
-            """, unsafe_allow_html=True)
-            topic = st.selectbox("", [
+            ''', unsafe_allow_html=True)
+            topic = st.selectbox("Exam Topic", [
                 "All Topics",
                 "Storage Services",
                 "Compute Services", 
@@ -296,7 +300,7 @@ def show_practice_exam(user):
         
         # Estimated time
         estimated_time = num_questions * 1.5
-        st.markdown(f"""
+        st.markdown(f'''
         <div class="glass-card" style="text-align: center; padding: 1.5rem;">
             <div style="display: flex; justify-content: center; align-items: center; gap: 2rem;">
                 <div>
@@ -313,117 +317,114 @@ def show_practice_exam(user):
                 </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
         
         st.write("")
-
-    if st.session_state.exam_session_id is None and st.button("🚀 Start Exam", type="primary", use_container_width=True):
-        # Generate unique session ID
-        session_id = f"exam_{user['id']}_{int(datetime.now().timestamp())}"
         
-        # Clear any existing queue
-        valkey.clear_queue(session_id)
-        
-        # Create session data
-        session_data = {
-            "session_id": session_id,
-            "user_id": user["id"],
-            "certification": user["target_certification"],
-            "difficulty": difficulty.lower(),
-            "topic": topic,
-            "total_questions": num_questions,
-            "score": 0,
-            "answers": [],
-            "started_at": datetime.now().isoformat()
-        }
-        
-        # Save session to Valkey
-        if valkey.save_session(session_id, session_data):
-            # Trigger background question generation
-            success = ai_service.trigger_exam_generation(
-                session_id=session_id,
-                user_id=user["id"],
-                certification=user["target_certification"],
-                difficulty=difficulty.lower(),
-                total_questions=num_questions,
-                topic=topic
-            )
+        # Start Exam button (only show when no exam is active)
+        if st.button("🚀 Start Exam", type="primary", use_container_width=True):
+            # Generate unique session ID
+            session_id = f"exam_{user['id']}_{int(datetime.now().timestamp())}"
             
-            if success:
-                st.info("⏳ Generating first question...")
+            # Clear any existing queue
+            valkey.clear_queue(session_id)
+            
+            # Create session data
+            session_data = {
+                "session_id": session_id,
+                "user_id": user["id"],
+                "certification": user["target_certification"],
+                "difficulty": difficulty.lower(),
+                "topic": topic,
+                "total_questions": num_questions,
+                "score": 0,
+                "answers": [],
+                "started_at": datetime.now().isoformat()
+            }
+            
+            # Save session to Valkey
+            if valkey.save_session(session_id, session_data):
+                # Trigger background question generation
+                success = ai_service.trigger_exam_generation(
+                    session_id=session_id,
+                    user_id=user["id"],
+                    certification=user["target_certification"],
+                    difficulty=difficulty.lower(),
+                    total_questions=num_questions,
+                    topic=topic
+                )
                 
-                # Wait for first question (with timeout)
-                max_wait = 30  # 30 seconds max
-                wait_interval = 1  # Check every 1 second
-                waited = 0
-                
-                question_data = None
-                while waited < max_wait:
-                    question_data = valkey.pop_question(session_id)
+                if success:
+                    st.info("⏳ Generating first question...")
+                    
+                    # Wait for first question (with timeout)
+                    max_wait = 30  # 30 seconds max
+                    wait_interval = 1  # Check every 1 second
+                    waited = 0
+                    
+                    question_data = None
+                    while waited < max_wait:
+                        question_data = valkey.pop_question(session_id)
+                        if question_data:
+                            break
+                        time.sleep(wait_interval)
+                        waited += wait_interval
+                    
                     if question_data:
-                        break
-                    time.sleep(wait_interval)
-                    waited += wait_interval
-                
-                if question_data:
-                    # Success! Start exam
-                    st.session_state.exam_session_id = session_id
-                    st.session_state.current_question = question_data
-                    st.session_state.question_number = 1
-                    st.session_state.total_questions = num_questions
-                    st.session_state.exam_score = 0
-                    st.session_state.exam_results = []
-                    st.session_state.show_explanation = False
-                    st.session_state.current_answer_result = None
-                    st.success("✅ Exam started!")
-                    st.rerun()
+                        # Success! Start exam
+                        st.session_state.exam_session_id = session_id
+                        st.session_state.current_question = question_data
+                        st.session_state.question_number = 1
+                        st.session_state.total_questions = num_questions
+                        st.session_state.exam_score = 0
+                        st.session_state.exam_results = []
+                        st.session_state.show_explanation = False
+                        st.session_state.current_answer_result = None
+                        st.success("✅ Exam started!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Timeout waiting for first question. Please try again.")
+                        valkey.delete_session(session_id)
                 else:
-                    st.error("❌ Timeout waiting for first question. Please try again.")
+                    st.error("❌ Could not start exam. Check n8n webhook configuration.")
                     valkey.delete_session(session_id)
             else:
-                st.error("❌ Could not start exam. Check n8n webhook configuration.")
-                valkey.delete_session(session_id)
-        else:
-            st.error("❌ Could not connect to Valkey. Check configuration.")
-
-    # If exam session is active, show current question with premium UI
-    else:
+                st.error("❌ Could not connect to Valkey. Check configuration.")
+    
+    # If exam session is active, show current question
+    elif st.session_state.exam_session_id is not None:
         session_id = st.session_state.exam_session_id
         
         # Exam header with progress
         progress = st.session_state.question_number / st.session_state.total_questions
         queue_length = valkey.get_queue_length(session_id)
         
-        st.markdown(f"""
+        st.markdown(f'''
         <div class="glass-card" style="padding: 1.5rem; margin-bottom: 1rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <div>
                     <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.25rem;">Progress</div>
+                </div>
+                <div style="text-align: right;">
                     <div style="font-size: 1.5rem; font-weight: 800; color: #FF9900;">
                         Question {st.session_state.question_number} / {st.session_state.total_questions}
                     </div>
                 </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.25rem;">Queue Status</div>
-                    <div style="font-size: 1.2rem; font-weight: 700; color: #10b981;">
-                        ✓ {queue_length} ready
-                    </div>
-                </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
-        
+        ''', unsafe_allow_html=True)
+                
         # Animated progress bar
         st.progress(progress)
         
         st.write("")
         
         # Display current question with premium styling
-        if st.session_state.current_question:
+        if st.session_state.current_question and not done:
             question_data = st.session_state.current_question
             
             # Question card
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="padding: 2rem; border-left: 4px solid #FF9900;">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                     <div style="
@@ -449,7 +450,7 @@ def show_practice_exam(user):
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             
             st.write("")
             
@@ -458,7 +459,7 @@ def show_practice_exam(user):
             options = question_data.get("options", [])
             
             # If not showing explanation, show answer options
-            if not st.session_state.show_explanation:
+            if not st.session_state.show_explanation and not done:
                 if question_type == "multiple":
                     st.info("ℹ️ Select ALL that apply (multiple correct answers)")
                     user_answers = []
@@ -550,49 +551,142 @@ def show_practice_exam(user):
             else:
                 result = st.session_state.current_answer_result
                 
-                if result:
-                    # Show if correct or incorrect
+                if result and not done:
+                    # Overall result header
                     if result.get("is_correct", False):
-                        st.success("✅ Correct! Well done!")
+                        st.success("✅ **Correct!** Well done!")
                     else:
-                        st.error("❌ Incorrect")
+                        st.error("❌ **Incorrect** - Review the correct answer below")
                     
-                    st.write("---")
+                    st.write("")
                     
-                    # Show explanation
-                    st.subheader("📚 Explanation")
-                    st.write(result.get("explanation", "No explanation available"))
+                    # Helper function to extract letter from option
+                    def extract_letter(text):
+                        """Extract letter (A, B, C, D) from option text"""
+                        text_str = str(text).strip().upper()
+                        if ')' in text_str:
+                            return text_str.split(')')[0].strip()
+                        return text_str[0] if text_str else ''
                     
-                    st.write("---")
+                    # Get user's answer and correct answer
+                    user_answer = st.session_state.exam_results[-1].get("user_answer")
+                    correct_answer = result.get("correct_answer")
                     
-                    # Show correct answer
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write("**Your Answer:**")
-                        user_ans = st.session_state.exam_results[-1].get("user_answer")
-                        if isinstance(user_ans, list):
-                            for ans in user_ans:
-                                st.write(f"- {ans}")
+                    # Convert to lists for uniform processing
+                    if not isinstance(user_answer, list):
+                        user_answer = [user_answer]
+                    if not isinstance(correct_answer, list):
+                        correct_answer = [correct_answer]
+                    
+                    # Extract letters from answers for comparison
+                    user_letters = [extract_letter(ans) for ans in user_answer]
+                    correct_letters = [extract_letter(ans) for ans in correct_answer]
+                    
+                    # Display all options with visual feedback
+                    st.markdown("**Answer Review:**")
+                    for option in options:
+                        option_letter = extract_letter(option)
+                        is_correct_option = option_letter in correct_letters
+                        is_user_selection = option_letter in user_letters
+                        
+                        if is_correct_option and is_user_selection:
+                            # User selected correct answer
+                            st.markdown(f'''
+                            <div style="
+                                background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%);
+                                border-left: 4px solid #10b981;
+                                padding: 1rem;
+                                margin-bottom: 0.5rem;
+                                border-radius: 0.5rem;
+                                display: flex;
+                                align-items: center;
+                                gap: 0.5rem;
+                            ">
+                                <span style="font-size: 1.5rem;">✅</span>
+                                <span style="color: #059669; font-weight: 600;">{option}</span>
+                                <span style="color: #059669; margin-left: auto; font-size: 0.875rem;">(Your answer - Correct!)</span>
+                            </div>
+                            ''', unsafe_allow_html=True)
+                        elif is_correct_option and not is_user_selection:
+                            # Correct answer but user didn't select it
+                            st.markdown(f'''
+                            <div style="
+                                background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.03) 100%);
+                                border-left: 4px solid #10b981;
+                                padding: 1rem;
+                                margin-bottom: 0.5rem;
+                                border-radius: 0.5rem;
+                                display: flex;
+                                align-items: center;
+                                gap: 0.5rem;
+                            ">
+                                <span style="font-size: 1.5rem;">✅</span>
+                                <span style="color: #059669; font-weight: 600;">{option}</span>
+                                <span style="color: #6b7280; margin-left: auto; font-size: 0.875rem;">(Correct answer)</span>
+                            </div>
+                            ''', unsafe_allow_html=True)
+                        elif not is_correct_option and is_user_selection:
+                            # User selected wrong answer
+                            st.markdown(f'''
+                            <div style="
+                                background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);
+                                border-left: 4px solid #ef4444;
+                                padding: 1rem;
+                                margin-bottom: 0.5rem;
+                                border-radius: 0.5rem;
+                                display: flex;
+                                align-items: center;
+                                gap: 0.5rem;
+                            ">
+                                <span style="font-size: 1.5rem;">❌</span>
+                                <span style="color: #dc2626; font-weight: 600;">{option}</span>
+                                <span style="color: #dc2626; margin-left: auto; font-size: 0.875rem;">(Your answer - Incorrect)</span>
+                            </div>
+                            ''', unsafe_allow_html=True)
                         else:
-                            st.write(user_ans)
+                            # Not selected and not correct
+                            st.markdown(f'''
+                            <div style="
+                                background: #f9fafb;
+                                border-left: 4px solid #e5e7eb;
+                                padding: 1rem;
+                                margin-bottom: 0.5rem;
+                                border-radius: 0.5rem;
+                                display: flex;
+                                align-items: center;
+                                gap: 0.5rem;
+                            ">
+                                <span style="font-size: 1.5rem; opacity: 0.3;">⚪</span>
+                                <span style="color: #6b7280;">{option}</span>
+                            </div>
+                            ''', unsafe_allow_html=True)
                     
-                    with col2:
-                        st.write("**Correct Answer:**")
-                        correct_ans = result.get("correct_answer")
-                        if isinstance(correct_ans, list):
-                            for ans in correct_ans:
-                                st.write(f"- {ans}")
-                        else:
-                            st.write(correct_ans)
+                    st.write("")
+                    
+                    # Show explanation in a nice card
+                    st.markdown("**💡 Explanation:**")
+                    st.markdown(f'''
+                    <div style="
+                        background: linear-gradient(135deg, rgba(255, 153, 0, 0.1) 0%, rgba(255, 153, 0, 0.03) 100%);
+                        border-left: 4px solid #FF9900;
+                        padding: 1.5rem;
+                        border-radius: 0.5rem;
+                        color: #4b5563;
+                        line-height: 1.7;
+                        margin-bottom: 1rem;
+                    ">
+                        {result.get("explanation", "No explanation available")}
+                    </div>
+                    ''', unsafe_allow_html=True)
                     
                     # Show reference link if available
                     if question_data.get("reference"):
-                        st.info(f"📖 Reference: {question_data.get('reference')}")
+                        st.info(f"📖 **Reference:** {question_data.get('reference')}")
                     
                     st.write("---")
                     
                     # Next question or finish
-                    if st.session_state.question_number < st.session_state.total_questions:
+                    if st.session_state.question_number < st.session_state.total_questions and not done:
                         if st.button("➡️ Next Question", type="primary", use_container_width=True):
                             # Get next question from queue (instant!)
                             next_question = valkey.pop_question(session_id)
@@ -607,212 +701,206 @@ def show_practice_exam(user):
                                 st.warning("⏳ Waiting for next question... (generating in background)")
                                 time.sleep(2)
                                 st.rerun()
-                    elif st.button("🏁 Finish Exam", type="primary", use_container_width=True):
-                        # Mark exam as finished and save/cleanup ONCE
+                    else:
+                        # Last question - show finish button if not already finished
                         if not st.session_state.exam_finished:
-                            # Calculate final score
-                            score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
-                            
-                            # Save to database BEFORE clearing anything
-                            try:
-                                from database import execute_update
-                                session_data = valkey.get_session(session_id)
-                                if session_data:
-                                    query = f"""
-                                    INSERT INTO exam_sessions (
-                                        session_id, user_id, certification, difficulty, topic,
-                                        total_questions, correct_answers, incorrect_answers,
-                                        percentage, passed, started_at, completed_at, duration_minutes
-                                    ) VALUES (
-                                        '{session_id}',
-                                        {user['id']},
-                                        '{user['target_certification']}',
-                                        '{session_data.get('difficulty', 'medium')}',
-                                        '{session_data.get('topic', 'All Topics')}',
-                                        {st.session_state.total_questions},
-                                        {st.session_state.exam_score},
-                                        {st.session_state.total_questions - st.session_state.exam_score},
-                                        {score_percentage},
-                                        {str(score_percentage >= 70).upper()},
-                                        '{session_data.get('started_at')}',
-                                        '{datetime.now().isoformat()}',
-                                        {int((datetime.now() - datetime.fromisoformat(session_data.get('started_at'))).seconds / 60)}
-                                    )
-                                    """
-                                    execute_update(query)
-                            except Exception as e:
-                                logger.error(f"Could not save results to database: {e}")
-                            
-                            # Clean up Valkey
-                            try:
-                                valkey.delete_session(session_id)
-                            except Exception as e:
-                                logger.error(f"Could not delete Valkey session: {e}")
-                            
-                            # Mark as finished
-                            st.session_state.exam_finished = True
-                        
-                        # Show confetti celebration
-                        show_confetti()
-                        st.markdown("""
-                        <div class="glass-card" style="text-align: center; padding: 3rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(255, 153, 0, 0.1) 100%);">
-                            <div style="font-size: 5rem; margin-bottom: 1rem; animation: bounce 1s infinite;">🎉</div>
-                            <h1 style="color: #10b981; margin-bottom: 0.5rem;">Exam Complete!</h1>
-                            <p style="color: #6b7280; font-size: 1.2rem;">Great job! Let's see how you did...</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        st.write("")
-                        
-                        # Calculate final score (again for display)
-                        score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
-                        
-                        # Score display with premium styling
-                        pass_status = score_percentage >= 70
-                        status_color = "#10b981" if pass_status else "#ef4444"
-                        status_text = "PASSED ✅" if pass_status else "NEEDS IMPROVEMENT 📈"
-                        
-                        st.markdown(f"""
-                        <div class="glass-card" style="text-align: center; padding: 2rem; border: 3px solid {status_color};">
-                            <div style="font-size: 1rem; color: #6b7280; margin-bottom: 0.5rem;">FINAL SCORE</div>
-                            <div style="font-size: 5rem; font-weight: 800; color: {status_color};">{score_percentage:.0f}%</div>
-                            <div style="font-size: 1.5rem; font-weight: 700; color: {status_color}; margin-top: 1rem;">{status_text}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        st.write("")
-                        
-                        # Detailed stats
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.markdown(create_metric_card("✅", "Correct", f"{st.session_state.exam_score}", None), unsafe_allow_html=True)
-                        with col2:
-                            st.markdown(create_metric_card("❌", "Incorrect", f"{st.session_state.total_questions - st.session_state.exam_score}", None), unsafe_allow_html=True)
-                        with col3:
-                            st.markdown(create_metric_card("📊", "Total", f"{st.session_state.total_questions}", None), unsafe_allow_html=True)
-                        
-                        st.write("")
-                        st.markdown('<h2 style="margin: 2rem 0 1rem 0;">📊 Detailed Review</h2>', unsafe_allow_html=True)
-                        
-                        for i, result in enumerate(st.session_state.exam_results, 1):
-                            status_icon = "✅" if result["is_correct"] else "❌"
-                            status_color = "#10b981" if result["is_correct"] else "#ef4444"
-                            status_text = "CORRECT" if result["is_correct"] else "INCORRECT"
-                            
-                            with st.expander(f"{status_icon} Question {i} - {result['question'][:60]}..."):
-                                st.markdown(f"""
-                                <div class="glass-card" style="border-left: 4px solid {status_color};">
-                                    <div style="display: inline-block; background: {status_color}; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 1rem;">
-                                        {status_text}
-                                    </div>
-                                    <h4 style="color: #232F3E; margin-bottom: 1rem;">Question:</h4>
-                                    <p style="color: #4b5563; line-height: 1.6; margin-bottom: 1.5rem;">{result['question']}</p>
+                            if st.button("🏁 Finish Exam", type="primary", use_container_width=True):
+                                # Calculate final score
+                                score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
+                                
+                                # Save to database BEFORE clearing anything
+                                try:
+                                    from database import execute_update
+                                    session_data = valkey.get_session(session_id)
+                                    if session_data:
+                                        query = f"""
+                                        INSERT INTO exam_sessions (
+                                            session_id, user_id, certification, difficulty, topic,
+                                            total_questions, correct_answers, incorrect_answers,
+                                            percentage, passed, started_at, completed_at, duration_minutes
+                                        ) VALUES (
+                                            '{session_id}',
+                                            {user['id']},
+                                            '{user['target_certification']}',
+                                            '{session_data.get('difficulty', 'medium')}',
+                                            '{session_data.get('topic', 'All Topics')}',
+                                            {st.session_state.total_questions},
+                                            {st.session_state.exam_score},
+                                            {st.session_state.total_questions - st.session_state.exam_score},
+                                            {score_percentage},
+                                            {str(score_percentage >= 70).upper()},
+                                            '{session_data.get('started_at')}',
+                                            '{datetime.now().isoformat()}',
+                                            {int((datetime.now() - datetime.fromisoformat(session_data.get('started_at'))).seconds / 60)}
+                                        )
+                                        """
+                                        execute_update(query)
+                                except Exception as e:
+                                    print(f"Could not save results to database: {e}")
                                     
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-                                        <div>
-                                            <h4 style="color: #6b7280; margin-bottom: 0.5rem;">Your Answer:</h4>
-                                            <div style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 0.5rem; color: #4b5563;">
-                                                {result['user_answer']}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h4 style="color: #6b7280; margin-bottom: 0.5rem;">Correct Answer:</h4>
-                                            <div style="background: rgba(16, 185, 129, 0.1); padding: 1rem; border-radius: 0.5rem; color: #4b5563;">
-                                                {result['correct_answer']}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <h4 style="color: #FF9900; margin-bottom: 0.5rem;">Explanation:</h4>
-                                    <p style="color: #4b5563; line-height: 1.6; background: rgba(255, 153, 0, 0.05); padding: 1rem; border-radius: 0.5rem;">
-                                        {result['explanation']}
-                                    </p>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
-                        st.write("")
-                        if st.button("🔄 Take Another Exam", use_container_width=True, type="primary"):
-                            # Store session_id before clearing state
-                            session_id_to_cleanup = st.session_state.exam_session_id
-                            
-                            data = {
-                                "action": "quit_session",
-                                "session_id": session_id_to_cleanup,
-                                "timestamp": datetime.utcnow().isoformat()
-                            }
-                            st.write("**Webhook URL:**", ai_service.exam_webhook)
-                            st.write("**Data:**", data)
-                            result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                            st.write("**Result:**", result)
-                            
-                            # Now reset all exam session state
-                            st.session_state.exam_session_id = None
-                            st.session_state.current_question = None
-                            st.session_state.question_number = 0
-                            st.session_state.exam_score = 0
-                            st.session_state.exam_results = []
-                            st.session_state.show_explanation = False
-                            st.session_state.current_answer_result = None
-                            st.session_state.exam_finished = False
-                            
-                            # Show success message
-                            show_toast("Ready for another exam! Good luck! 🚀", type="success")
-                            st.rerun()
-    
-            # Option to quit exam early (only show during active exam, not after finish)
-            if st.session_state.current_question and not (
-                st.session_state.question_number >= st.session_state.total_questions 
-                and st.session_state.show_explanation 
-                and len(st.session_state.exam_results) >= st.session_state.total_questions
-            ):
-                st.write("")
-                if st.button("❌ Quit Exam", use_container_width=True):
-                    # Clean up - notify n8n to stop generating questions
-                    try:
-                        data = {
-                            "action": "quit_session",
-                            "session_id": session_id,
-                            "timestamp": datetime.utcnow().isoformat()
-                        }
-                        result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
-                        if result and result.get("error"):
-                            logger.error(f"Warning: Could not notify n8n: {result.get('error')}")
-                    except Exception as e:
-                        logger.error(f"Warning: Failed to notify n8n about session cleanup: {e} after clicking quit exam button")
+                                # Clean up Valkey
+                                try:
+                                    valkey.delete_session(session_id)
+                                except Exception as e:
+                                    print(f"Could not delete Valkey session: {e}")
+                                
+                                # Mark as finished
+                                st.session_state.exam_finished = True
+                                st.rerun()
+        
+        # Show exam results if finished
+        if st.session_state.exam_finished:
+            # Show confetti celebration
+            show_confetti()
+            st.markdown(f'''
+            <div class="glass-card" style="text-align: center; padding: 3rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(255, 153, 0, 0.1) 100%);">
+                <div style="font-size: 5rem; margin-bottom: 1rem; animation: bounce 1s infinite;">🎉</div>
+                <h1 style="color: #10b981; margin-bottom: 0.5rem;">Exam Complete!</h1>
+                <p style="color: #6b7280; font-size: 1.2rem;">Great job! Let's see how you did...</p>
+            </div>
+            ''', unsafe_allow_html=True)
+            st.write("")
+            
+            # Calculate final score
+            score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
+            
+            # Score display with premium styling
+            pass_status = score_percentage >= 70
+            status_color = "#10b981" if pass_status else "#ef4444"
+            status_text = "PASSED ✅" if pass_status else "NEEDS IMPROVEMENT 📈"
+            
+            st.markdown(f'''
+            <div class="glass-card" style="text-align: center; padding: 2rem; border: 3px solid {status_color};">
+                <div style="font-size: 1rem; color: #6b7280; margin-bottom: 0.5rem;">FINAL SCORE</div>
+                <div style="font-size: 5rem; font-weight: 800; color: {status_color};">{score_percentage:.0f}%</div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: {status_color}; margin-top: 1rem;">{status_text}</div>
+            </div>
+            ''', unsafe_allow_html=True)
+            
+            st.write("")
+            
+            # Detailed stats
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(create_metric_card("✅", "Correct", f"{st.session_state.exam_score}", None), unsafe_allow_html=True)
+            with col2:
+                st.markdown(create_metric_card("❌", "Incorrect", f"{st.session_state.total_questions - st.session_state.exam_score}", None), unsafe_allow_html=True)
+            with col3:
+                st.markdown(create_metric_card("📊", "Total", f"{st.session_state.total_questions}", None), unsafe_allow_html=True)
+            
+            st.write("")
+            st.markdown('<h2 style="margin: 2rem 0 1rem 0;">📊 Detailed Review</h2>', unsafe_allow_html=True)
+            
+            for i, result in enumerate(st.session_state.exam_results, 1):
+                status_icon = "✅" if result["is_correct"] else "❌"
+                status_color = "#10b981" if result["is_correct"] else "#ef4444"
+                status_text = "CORRECT" if result["is_correct"] else "INCORRECT"
+                
+                with st.expander(f"{status_icon} Question {i} - {result['question'][:60]}..."):
+                    # Status badge
+                    st.markdown(f'''
+                    <div style="display: inline-block; background: {status_color}; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 1rem;">
+                        {status_text}
+                    </div>
+                    ''', unsafe_allow_html=True)
                     
-                    valkey.delete_session(session_id)
-                    st.session_state.exam_session_id = None
-                    st.session_state.current_question = None
-                    st.session_state.question_number = 0
-                    st.session_state.exam_score = 0
-                    st.session_state.exam_results = []
-                    st.session_state.show_explanation = False
-                    st.session_state.current_answer_result = None
-                    st.session_state.exam_finished = False
-                    st.rerun()
+                    # Question
+                    st.markdown("**Question:**")
+                    st.write(result['question'])
+                    st.write("")
+                    
+                    # Answers side by side
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**Your Answer:**")
+                        user_ans = result['user_answer']
+                        if isinstance(user_ans, list):
+                            for ans in user_ans:
+                                st.write(f"- {ans}")
+                        else:
+                            st.write(user_ans)
+                    
+                    with col2:
+                        st.markdown("**Correct Answer:**")
+                        correct_ans = result['correct_answer']
+                        if isinstance(correct_ans, list):
+                            for ans in correct_ans:
+                                st.write(f"- {ans}")
+                        else:
+                            st.write(correct_ans)
+                    
+                    st.write("")
+                    st.markdown("**💡 Explanation:**")
+                    st.info(result['explanation'])
+            
+            st.write("---")
+            if st.button("🔄 Take Another Exam", use_container_width=True):
+                # Reset all exam session state 
+                print("Taking another exam")
+                done = True
+        
+        # Show Quit Exam button only during active exam (not when results are shown)
+        elif st.session_state.exam_session_id and not st.session_state.exam_finished:
+            st.write("")
+            if st.button("❌ Quit Exam", use_container_width=True):
+                print("Quitting exam early")
+                done = True
+        
+        # Cleanup logic (executes when done flag is set)
+        if done:
+            # Clean up - notify n8n to stop generating questions
+            try:
+                data = {
+                    "action": "quit_session",
+                    "session_id": session_id,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
+                if result and result.get("error"):
+                    print(f"Warning: Could not notify n8n: {result.get('error')}")
+            except Exception as e:
+                print(f"Warning: Failed to notify n8n about session cleanup: {e}")
+            
+            # Clean up Valkey session
+            try:
+                valkey.delete_session(session_id)
+            except Exception as e:
+                print(f"Warning: Could not delete Valkey session: {e}")
+            
+            # Reset all session state
+            st.session_state.exam_session_id = None
+            st.session_state.current_question = None
+            st.session_state.question_number = 0
+            st.session_state.exam_score = 0
+            st.session_state.exam_results = []
+            st.session_state.show_explanation = False
+            st.session_state.current_answer_result = None
+            st.session_state.exam_finished = False
+            st.rerun()
 
 
 def show_study_tricks(user):
     """Premium Study Tricks Section with interactive cards"""
     
     # Header
-    st.markdown(f"""
+    st.markdown(f'''
     <div class="glass-container" style="text-align: center; padding: 2rem;">
         <div style="font-size: 4rem; margin-bottom: 0.5rem;">🧠</div>
         <h1 style="margin-bottom: 0.5rem;">Study Tricks & Memory Techniques</h1>
         <p style="color: #6b7280; font-size: 1.1rem;">
-            Master <strong style="color: #FF9900;">{user['target_certification']}</strong> with proven memory techniques
+            Master <strong style="color: #FF9900;">{user["target_certification"]}</strong> with proven memory techniques
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
     st.write("")
     
     # Topic selection with premium styling
-    st.markdown("""
+    st.markdown('''
     <div class="glass-card" style="padding: 1.5rem;">
         <h3 style="color: #232F3E; margin-bottom: 1rem;">🎯 What would you like to remember?</h3>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -838,16 +926,16 @@ def show_study_tricks(user):
     if "current_tricks" in st.session_state and st.session_state.current_tricks:
         tricks = st.session_state.current_tricks
         
-        st.markdown("""
+        st.markdown('''
         <div class="glass-card" style="text-align: center; padding: 1.5rem; margin: 1.5rem 0;">
             <div style="font-size: 2rem; margin-bottom: 0.5rem;">✅</div>
             <div style="font-size: 1.2rem; font-weight: 700; color: #10b981;">Memory Tricks Generated!</div>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
         
         # Display each trick type in premium cards
         if tricks.get("mnemonic"):
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="border-left: 4px solid #667eea; padding: 2rem;">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                     <div style="font-size: 3rem;">🔤</div>
@@ -857,11 +945,11 @@ def show_study_tricks(user):
                     {tricks["mnemonic"]}
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             st.write("")
         
         if tricks.get("analogy"):
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="border-left: 4px solid #10b981; padding: 2rem;">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                     <div style="font-size: 3rem;">🔗</div>
@@ -871,11 +959,11 @@ def show_study_tricks(user):
                     {tricks["analogy"]}
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             st.write("")
         
         if tricks.get("visualization"):
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="border-left: 4px solid #f59e0b; padding: 2rem;">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                     <div style="font-size: 3rem;">🎨</div>
@@ -885,26 +973,26 @@ def show_study_tricks(user):
                     {tricks["visualization"]}
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             st.write("")
         
         if tricks.get("key_points"):
-            st.markdown("""
+            st.markdown('''
             <div class="glass-card" style="border-left: 4px solid #FF9900; padding: 2rem;">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                     <div style="font-size: 3rem;">🎯</div>
                     <h3 style="color: #232F3E; margin: 0;">Key Points to Remember</h3>
                 </div>
                 <div style="background: rgba(255, 153, 0, 0.1); padding: 1.5rem; border-radius: 0.75rem;">
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             for point in tricks["key_points"]:
-                st.markdown(f"""
+                st.markdown(f'''
                 <div style="display: flex; align-items: start; gap: 1rem; margin-bottom: 1rem;">
                     <div style="color: #FF9900; font-size: 1.5rem; line-height: 1;">✓</div>
                     <div style="color: #4b5563; line-height: 1.8; font-size: 1.05rem;">{point}</div>
                 </div>
-                """, unsafe_allow_html=True)
-            st.markdown("</div></div>", unsafe_allow_html=True)
+                ''', unsafe_allow_html=True)
+            st.markdown('</div></div>', unsafe_allow_html=True)
     
     # Popular topics with premium grid
     st.write("")
@@ -924,12 +1012,12 @@ def show_study_tricks(user):
     cols = st.columns(4)
     for i, (topic, icon) in enumerate(popular_topics):
         with cols[i % 4]:
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="text-align: center; padding: 1rem; cursor: pointer; transition: all 0.3s ease;">
                 <div style="font-size: 2rem; margin-bottom: 0.5rem;">{icon}</div>
                 <div style="font-size: 0.9rem; font-weight: 600; color: #232F3E;">{topic}</div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             if st.button(f"Learn {topic}", key=f"pop_{i}", use_container_width=True):
                 st.session_state.selected_topic = topic
                 st.rerun()
@@ -939,7 +1027,7 @@ def show_answer_evaluation(user):
     """Premium Answer Evaluation with detailed feedback"""
     
     # Header
-    st.markdown("""
+    st.markdown('''
     <div class="glass-container" style="text-align: center; padding: 2rem;">
         <div style="font-size: 4rem; margin-bottom: 0.5rem;">✍️</div>
         <h1 style="margin-bottom: 0.5rem;">Answer Evaluation</h1>
@@ -947,7 +1035,7 @@ def show_answer_evaluation(user):
             Practice writing answers and get <strong style="color: #FF9900;">AI-powered feedback</strong>
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
     st.write("")
     
@@ -1050,15 +1138,15 @@ def show_qna_knowledge_base(user):
     """Premium Q&A Knowledge Base with search"""
     
     # Header
-    st.markdown(f"""
+    st.markdown(f'''
     <div class="glass-container" style="text-align: center; padding: 2rem;">
         <div style="font-size: 4rem; margin-bottom: 0.5rem;">❓</div>
         <h1 style="margin-bottom: 0.5rem;">Q&A Knowledge Base</h1>
         <p style="color: #6b7280; font-size: 1.1rem;">
-            Explore frequently asked questions for <strong style="color: #FF9900;">{user['target_certification']}</strong>
+            Explore frequently asked questions for <strong style="color: #FF9900;">{user["target_certification"]}</strong>
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
     st.write("")
     
@@ -1128,14 +1216,14 @@ def show_progress_dashboard(user):
         greeting = "Good Evening"
         emoji = "🌙"
     
-    st.markdown(f"""
+    st.markdown(f'''
     <div class="hero-container" style="padding: 2rem; text-align: left;">
         <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">{emoji} {greeting}, {user['name']}!</h1>
         <p style="font-size: 1.2rem; color: #6b7280; margin-bottom: 0;">
             Keep up the great work on <strong style="color: #FF9900;">{user['target_certification']}</strong>
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
     st.write("")
 
@@ -1176,31 +1264,31 @@ def show_progress_dashboard(user):
         col1, col2, col3 = st.columns(3, gap="large")
         
         with col1:
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="text-align: center; padding: 2rem;">
                 <div style="font-size: 4rem; margin-bottom: 0.5rem; animation: bounce 2s infinite;">🔥</div>
                 <div style="font-size: 3rem; font-weight: 800; color: #FF9900;">{streak}</div>
                 <div style="color: #6b7280; font-weight: 600; text-transform: uppercase;">Days Streak</div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
         
         with col2:
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="text-align: center; padding: 2rem;">
                 <div style="font-size: 4rem; margin-bottom: 0.5rem;">🏆</div>
                 <div style="font-size: 3rem; font-weight: 800; color: #FF9900;">{longest_streak}</div>
                 <div style="color: #6b7280; font-weight: 600; text-transform: uppercase;">Best Streak</div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
         
         with col3:
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="text-align: center; padding: 2rem;">
                 <div style="font-size: 4rem; margin-bottom: 0.5rem;">⚡</div>
                 <div style="font-size: 3rem; font-weight: 800; color: #FF9900;">{xp}</div>
                 <div style="color: #6b7280; font-weight: 600; text-transform: uppercase;">Total XP</div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
         
         st.write("")
         
@@ -1219,12 +1307,12 @@ def show_progress_dashboard(user):
         
         for i, (topic, progress, icon) in enumerate(topics):
             with [col1, col2, col3, col4, col5][i]:
-                st.markdown(f"""
+                st.markdown(f'''
                 <div class="glass-card" style="text-align: center; padding: 1.5rem;">
                     <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{icon}</div>
                     {create_progress_ring(progress, topic, 100)}
                 </div>
-                """, unsafe_allow_html=True)
+                ''', unsafe_allow_html=True)
         
         st.write("")
         
@@ -1232,7 +1320,7 @@ def show_progress_dashboard(user):
         st.markdown('<h3 style="margin: 2rem 0 1rem 0;">Detailed Progress</h3>', unsafe_allow_html=True)
         
         for topic, progress, icon in topics:
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="padding: 1rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                     <div style="font-weight: 700; color: #232F3E;">
@@ -1243,17 +1331,17 @@ def show_progress_dashboard(user):
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             st.progress(progress / 100)
             st.write("")
     else:
-        st.markdown("""
+        st.markdown('''
         <div class="glass-card" style="text-align: center; padding: 3rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">📊</div>
             <h3 style="color: #6b7280;">No Progress Data Yet</h3>
             <p style="color: #9ca3af;">Start taking practice exams to see your progress here!</p>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
     # Recent Activity
     st.write("")
@@ -1273,7 +1361,7 @@ def show_progress_dashboard(user):
             icon_map = {"exam": "📝", "chat": "💬", "tricks": "🧠"}
             icon = icon_map.get(activity["type"], "📌")
             
-            st.markdown(f"""
+            st.markdown(f'''
             <div class="glass-card" style="padding: 1rem;">
                 <div style="display: flex; align-items: center; gap: 1rem;">
                     <div style="font-size: 2rem;">{icon}</div>
@@ -1287,15 +1375,15 @@ def show_progress_dashboard(user):
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
             st.write("")
     else:
-        st.markdown("""
+        st.markdown('''
         <div class="glass-card" style="text-align: center; padding: 2rem;">
             <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
             <p style="color: #6b7280;">No recent activity. Start your learning journey now!</p>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
 def show_dashboard():
     """Premium Dashboard with World-Class Navigation"""
@@ -1317,19 +1405,19 @@ def show_dashboard():
     # Premium Sidebar
     with st.sidebar:
         # Logo and branding
-        st.markdown("""
+        st.markdown('''
         <div style="text-align: center; margin-bottom: 2rem;">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/9/93/Amazon_Web_Services_Logo.svg" 
+            <img src="https://dev-artifacts-002.s3.us-east-1.amazonaws.com/aws-color.png" 
                  style="width: 120px; margin-bottom: 1rem;" alt="AWS Logo">
             <h2 style="color: white; margin: 0; font-size: 1.5rem;">AWS Coach</h2>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
         
         # User Profile Card - Fixed version without code snippet
         user_name_display = user['name'] if len(user['name']) <= 20 else user['name'][:20] + "..."
         cert_display = user['target_certification'] if len(user['target_certification']) <= 35 else user['target_certification'][:35] + "..."
         
-        st.markdown(f"""
+        st.markdown(f'''
         <div style="
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
@@ -1359,37 +1447,32 @@ def show_dashboard():
                     <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.875rem;">
                         Level {int(xp / 100) + 1}
                     </div>
-                </div>
-            </div>
-            
-            <div style="margin-bottom: 1rem;">
-                <div style="color: rgba(255, 255, 255, 0.8); font-size: 0.875rem; margin-bottom: 0.5rem;">
+                    <div style="color: rgba(255, 255, 255, 0.8); font-size: 0.875rem; margin-bottom: 0.5rem;">
                     🎯 Target Certification
+                    </div>
+                    <div style="color: white; font-weight: 600; font-size: 0.9rem; line-height: 1.3;">
+                        {cert_display}
+                    </div>
+                        <div style="flex: 1; text-align: center;">
+                        <div style="font-size: 1.5rem;">🔥</div>
+                        <div style="color: #FF9900; font-weight: 800; font-size: 1.2rem;">{streak}</div>
+                        <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.75rem;">Day Streak</div>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <div style="font-size: 1.5rem;">⚡</div>
+                        <div style="color: #FF9900; font-weight: 800; font-size: 1.2rem;">{xp}</div>
+                        <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.75rem;">Total XP</div>
+                    </div>
                 </div>
-                <div style="color: white; font-weight: 600; font-size: 0.9rem; line-height: 1.3;">
-                    {cert_display}
                 </div>
-            </div>
-            
-            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                <div style="flex: 1; text-align: center;">
-                    <div style="font-size: 1.5rem;">🔥</div>
-                    <div style="color: #FF9900; font-weight: 800; font-size: 1.2rem;">{streak}</div>
-                    <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.75rem;">Day Streak</div>
-                </div>
-                <div style="flex: 1; text-align: center;">
-                    <div style="font-size: 1.5rem;">⚡</div>
-                    <div style="color: #FF9900; font-weight: 800; font-size: 1.2rem;">{xp}</div>
-                    <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.75rem;">Total XP</div>
-                </div>
-            </div>
+            </div>      
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
         
         st.markdown("---")
         
         # Navigation Menu
-        st.markdown('<div style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">Navigation</div>', unsafe_allow_html=True)
+        st.markdown('''<div style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">Navigation</div>''', unsafe_allow_html=True)
         
         section = option_menu(
             menu_title=None,
@@ -1400,10 +1483,11 @@ def show_dashboard():
             styles={
                 "container": {"padding": "0", "background-color": "transparent"},
                 "icon": {"color": "#FF9900", "font-size": "1.2rem"}, 
+                "icon-selected": {"color": "white"},
                 "nav-link": {
-                    "color": "#E5E7EB",
+                    "color": "#000000",
                     "font-size": "0.95rem",
-                    "font-weight": "500",
+                    "font-weight": "700",
                     "text-align": "left",
                     "margin": "0.25rem 0",
                     "padding": "0.75rem 1rem",
@@ -1412,10 +1496,11 @@ def show_dashboard():
                     "background-color": "rgba(255, 255, 255, 0.05)",
                 },
                 "nav-link-selected": {
-                    "background": "linear-gradient(135deg, #FF9900 0%, #EC7211 100%)",
+                    "background": "linear-gradient(135deg, #222222 0%, #DB6100 100%)",
                     "color": "white",
                     "font-weight": "700",
                     "box-shadow": "0 4px 6px rgba(0, 0, 0, 0.2)",
+                    "icon-color": "white",
                 },
             }
         )
@@ -1423,7 +1508,7 @@ def show_dashboard():
         st.markdown("---")
         
         # Quick Actions
-        st.markdown('<div style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">Quick Actions</div>', unsafe_allow_html=True)
+        st.markdown('''<div style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">Quick Actions</div>''', unsafe_allow_html=True)
         
         if st.button("⚙️ Settings", use_container_width=True):
             st.info("Settings coming soon!")
@@ -1434,7 +1519,7 @@ def show_dashboard():
             st.rerun()
         
         # Footer
-        st.markdown("""
+        st.markdown('''
         <div style="
             position: fixed;
             bottom: 1rem;
@@ -1446,7 +1531,7 @@ def show_dashboard():
         ">
             AWS Coach v2.0
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
     
     # Display selected section
     if section == "Progress Dashboard":

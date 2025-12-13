@@ -301,7 +301,7 @@ def get_custom_css():
        SIDEBAR
        ============================================ */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #232F3E 0%, #37475A 100%) !important;
+        background: linear-gradient(180deg, #000000 0%, #37475A 100%) !important;
         border-right: 1px solid rgba(255, 153, 0, 0.2);
     }
     

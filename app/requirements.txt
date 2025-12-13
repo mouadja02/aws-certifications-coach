@@ -4,13 +4,13 @@
 # ============================================
 # STREAMLIT FRAMEWORK
 # ============================================
-streamlit==1.29.0
+streamlit
 
 # ============================================
 # SNOWFLAKE CONNECTOR (Native integration with Streamlit)
 # ============================================
-snowflake-connector-python==3.6.0
-snowflake-snowpark-python==1.11.1
+snowflake-connector-python
+snowflake-snowpark-python
 
 # ============================================
 # AUTHENTICATION & SECURITY
@@ -26,13 +26,13 @@ requests==2.31.0
 # ============================================
 # DATA MANIPULATION
 # ============================================
-pandas==2.1.4
+pandas
 
 # ============================================
 # UTILITIES
 # ============================================
-python-dotenv==1.0.0
-pytz==2023.3.post1
+python-dotenv
+pytz
 
 streamlit-option-menu
 valkey
