@@ -349,6 +349,29 @@ def log_activity(user_id: int, action: str, details: str = None, ip_address: str
         logger.error(f"Error logging activity: {e}")
         return False
 
+def get_qa_data(category: str, difficulty: str, target_certification: str):
+    """Get Q&A data from Snowflake"""
+    try:
+        conn = get_snowflake_connection()
+        if conn is None:
+            return None
+        
+        session = conn.session()
+
+        if category != "All":
+            query = f"SELECT * FROM aws_scenarios WHERE target_certification ILIKE '%{target_certification}%' AND lower(category) = lower('{category}')"
+        else:
+            query = f"SELECT * FROM aws_scenarios WHERE target_certification ILIKE '%{target_certification}%'"
+        
+        if difficulty != "All":
+            query = query + f" AND lower(difficulty) = lower('{difficulty}')"
+
+        result = session.sql(query).collect()
+        return result
+    except Exception as e:
+        logger.error(f"Error retrieving Q&A data: {e}")
+        return None
+
 # ============================================
 # TESTING & INITIALIZATION
 # ============================================

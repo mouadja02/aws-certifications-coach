@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log
+from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log, get_qa_data
 from ai_service import AIService
 from valkey_client import get_valkey_client
 from styles import get_custom_css, create_metric_card, create_progress_ring, create_badge, get_confetti_animation
@@ -1151,53 +1151,75 @@ def show_qna_knowledge_base(user):
     st.write("")
     
     # Search
-    search_query = st.text_input("🔍 Search questions:", placeholder="e.g., S3, Lambda, VPC...")
     
     # Categories
     categories = ["All", "Storage", "Compute", "Networking", "Security", "Database", "Monitoring"]
-    selected_category = st.selectbox("Filter by category:", categories)
+    difficulty = ["All", "Easy", "Medium", "Hard"]
+    selected_category = st.selectbox("Select a category:", categories)
+    selected_difficulty = st.selectbox("Select a difficulty:", difficulty)
     
-    # Sample Q&A (in production, this would come from Snowflake/n8n)
-    qa_data = [
-        {
-            "category": "Storage",
-            "question": "What is the difference between S3 and EBS?",
-            "answer": "S3 is object storage for files and data, while EBS is block storage attached to EC2 instances.",
-            "tags": ["S3", "EBS", "Storage"]
-        },
-        {
-            "category": "Compute",
-            "question": "When should I use Lambda vs EC2?",
-            "answer": "Use Lambda for event-driven, short-running tasks. Use EC2 for long-running applications and full control.",
-            "tags": ["Lambda", "EC2", "Compute"]
-        },
-        # Add more...
-    ]
-    
+    """
+    SNOWFLAKE TABLE 
+    aws_scenarios (
+    scenario_id VARCHAR(255) PRIMARY KEY,
+    category VARCHAR(50) NOT NULL,
+    difficulty VARCHAR(20) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    target_certification VARCHAR(500) NOT NULL,
+    scenario_text TEXT NOT NULL,
+    challenge_question TEXT NOT NULL,
+    solution_answer TEXT NOT NULL,
+    best_practices TEXT,
+    aws_services_used VARIANT,
+    architecture_considerations TEXT,
+    cost_optimization_tips TEXT,
+    security_considerations TEXT,
+    reference_links VARIANT,
+    tags VARIANT,
+    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+    """
+    # ERROR:__main__:Application error: 'list' object has no attribute 'to_dict'
+    qa_data = get_qa_data(selected_category, selected_difficulty, user['target_certification'].split(" - ")[0])
+    print(qa_data)
+
     # Display Q&A
-    filtered_qa = qa_data
-    if selected_category != "All":
-        filtered_qa = [q for q in qa_data if q["category"] == selected_category]
+    if "qa_current_question" not in st.session_state:
+        st.session_state.qa_current_question = 0
+
+    if st.button("Ask me !", key="ask_me"):
+        st.session_state.qa_current_question = 0
+        st.rerun()
     
-    if search_query:
-        filtered_qa = [q for q in filtered_qa if search_query.lower() in q["question"].lower() or search_query.lower() in q["answer"].lower()]
-    
-    st.write(f"**Found {len(filtered_qa)} questions**")
-    st.write("---")
-    
-    for i, qa in enumerate(filtered_qa, 1):
-        with st.expander(f"Q{i}: {qa['question']}"):
-            st.write(f"**Category:** {qa['category']}")
-            st.write(f"**Answer:** {qa['answer']}")
-            st.write(f"**Tags:** {', '.join(qa['tags'])}")
-            
-            col1, col2 = st.columns(2)
+    # Display current question if we have data
+    if qa_data and len(qa_data) > 0:
+        current_question = st.session_state.qa_current_question
+        
+        if current_question < len(qa_data):
+            st.write(f"**Scenario:** {qa_data[current_question].SCENARIO_TEXT}")
+            st.write(f"**Challenge Question:** {qa_data[current_question].CHALLENGE_QUESTION}")
+
+            # Fold this 
+            with st.expander(f"Check the answer"):
+                st.write(f"**Solution Answer:** {qa_data[current_question].SOLUTION_ANSWER}")
+                st.write(f"**Best Practices:** {qa_data[current_question].BEST_PRACTICES}")
+                st.write(f"**AWS Services Used:** {qa_data[current_question].AWS_SERVICES_USED}")
+                st.write(f"**Architecture Considerations:** {qa_data[current_question].ARCHITECTURE_CONSIDERATIONS}")
+                st.write(f"**Cost Optimization Tips:** {qa_data[current_question].COST_OPTIMIZATION_TIPS}")
+                st.write(f"**Security Considerations:** {qa_data[current_question].SECURITY_CONSIDERATIONS}")
+
+            # Navigation buttons
+            col1, col2 = st.columns([1, 1])
             with col1:
-                if st.button("👍 Helpful", key=f"helpful_{i}"):
-                    st.success("Thanks for the feedback!")
+                if current_question > 0 and st.button("⬅️ Previous", key="qa_previous"):
+                    st.session_state.qa_current_question -= 1
+                    st.rerun()
             with col2:
-                if st.button("👎 Not Helpful", key=f"not_helpful_{i}"):
-                    st.info("We'll improve this answer!")
+                if current_question < len(qa_data) - 1 and st.button("Next ➡️", key="qa_next"):
+                    st.session_state.qa_current_question += 1
+                    st.rerun()
+            
+            # Show question counter
+            st.info(f"Question {current_question + 1} of {len(qa_data)}")
 
 def show_progress_dashboard(user):
     """Premium Progress Dashboard with stunning visuals and animations"""
