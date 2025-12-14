@@ -1185,10 +1185,6 @@ def show_qna_knowledge_base(user):
     # Display Q&A
     if "qa_current_question" not in st.session_state:
         st.session_state.qa_current_question = 0
-
-    if st.button("Ask me !", key="ask_me"):
-        st.session_state.qa_current_question = 0
-        st.rerun()
     
     # Display current question if we have data
     if qa_data and len(qa_data) > 0:
