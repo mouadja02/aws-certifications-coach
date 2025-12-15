@@ -8,22 +8,30 @@ import time
 import sys
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 import logging
+import traceback
 
+# Configure logging with detailed format including line numbers and traceback
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log, get_qa_data
+from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log, get_qa_data, increment_user_streak, log_activity
 from ai_service import AIService
 from valkey_client import get_valkey_client
 from styles import get_custom_css, create_metric_card, create_progress_ring, create_badge, get_confetti_animation
 from components import show_confetti, show_toast, show_loading_skeleton
 
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def get_user_from_db(email: str):
-    """Fetch user data from Snowflake"""
+    """Fetch user data from Snowflake with caching"""
     try:
         user = get_user_by_email(email)
         if user:
@@ -37,6 +45,21 @@ def get_user_from_db(email: str):
     except Exception as e:
         st.error(f"Error fetching user data: {e}")
     return None
+
+@st.cache_data(ttl=60)  # Cache for 1 minute
+def get_cached_user_progress(user_id: int):
+    """Get user progress with caching"""
+    return get_user_progress(user_id)
+
+@st.cache_data(ttl=60)  # Cache for 1 minute
+def get_cached_activity_log(user_id: int):
+    """Get activity log with caching"""
+    return get_activity_log(user_id)
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_cached_qa_data(category: str, difficulty: str, certification: str):
+    """Get Q&A data with caching"""
+    return get_qa_data(category, difficulty, certification)
 
 
 def show_ai_chat(user):
@@ -164,15 +187,21 @@ def show_ai_chat(user):
         try:
             with st.spinner("🧠 AI is thinking..."):
                 response_text = ai_service.answer_question(
-                    user["id"], 
+                    user["id"],
                     prompt,
                     context=user["target_certification"]
                 )
                 save_chat_message(user["id"], prompt, response_text)
+
+                # Log activity
+                log_activity(user["id"], 'chat', f"Asked: {prompt[:50]}...")
+
+                # Clear cache to update recent activity
+                st.cache_data.clear()
         except Exception as e:
             print(f"Error: {e}")
             response_text = "Sorry, I'm having trouble processing your question. Please try again."
-        
+
         st.session_state.messages.append({"role": "assistant", "content": response_text})
         st.rerun()
     
@@ -707,10 +736,10 @@ def show_practice_exam(user):
                             if st.button("🏁 Finish Exam", type="primary", use_container_width=True):
                                 # Calculate final score
                                 score_percentage = (st.session_state.exam_score / st.session_state.total_questions) * 100
-                                
+
                                 # Save to database BEFORE clearing anything
                                 try:
-                                    from database import execute_update
+                                    from database import execute_update, update_user_progress
                                     session_data = valkey.get_session(session_id)
                                     if session_data:
                                         query = f"""
@@ -735,6 +764,33 @@ def show_practice_exam(user):
                                         )
                                         """
                                         execute_update(query)
+
+                                        # Update user progress and streak
+                                        increment_user_streak(user['id'])
+
+                                        # Log activity
+                                        log_activity(
+                                            user['id'],
+                                            'exam',
+                                            f"Completed {session_data.get('topic', 'All Topics')} exam with {score_percentage:.0f}% score"
+                                        )
+
+                                        # Update practice tests count and average score
+                                        current_progress = get_user_progress(user['id'])
+                                        if current_progress:
+                                            tests_taken = current_progress.get('PRACTICE_TESTS_TAKEN', 0) + 1
+                                            current_avg = current_progress.get('AVERAGE_SCORE', 0)
+                                            new_avg = ((current_avg * (tests_taken - 1)) + score_percentage) / tests_taken
+
+                                            update_user_progress(user['id'], {
+                                                'practice_tests_taken': tests_taken,
+                                                'average_score': int(new_avg),
+                                                'total_questions_answered': current_progress.get('TOTAL_QUESTIONS_ANSWERED', 0) + st.session_state.total_questions,
+                                                'correct_answers': current_progress.get('CORRECT_ANSWERS', 0) + st.session_state.exam_score
+                                            })
+
+                                        # Clear cache to show updated stats
+                                        st.cache_data.clear()
                                 except Exception as e:
                                     print(f"Could not save results to database: {e}")
                                     
@@ -750,13 +806,31 @@ def show_practice_exam(user):
         
         # Show exam results if finished
         if st.session_state.exam_finished:
+            # Calculate final score for celebration message
+            score_percentage_display = (st.session_state.exam_score / st.session_state.total_questions) * 100
+
             # Show confetti celebration
             show_confetti()
+
+            # Show personalized message based on score
+            if score_percentage_display >= 90:
+                congrats_msg = "Outstanding! You're exam-ready! 🌟"
+                color = "#10b981"
+            elif score_percentage_display >= 70:
+                congrats_msg = "Great job! You passed! Keep it up! 👍"
+                color = "#10b981"
+            elif score_percentage_display >= 50:
+                congrats_msg = "Good effort! Keep practicing! 💪"
+                color = "#f59e0b"
+            else:
+                congrats_msg = "Keep learning! You'll get there! 📚"
+                color = "#ef4444"
+
             st.markdown(f'''
             <div class="glass-card" style="text-align: center; padding: 3rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(255, 153, 0, 0.1) 100%);">
                 <div style="font-size: 5rem; margin-bottom: 1rem; animation: bounce 1s infinite;">🎉</div>
-                <h1 style="color: #10b981; margin-bottom: 0.5rem;">Exam Complete!</h1>
-                <p style="color: #6b7280; font-size: 1.2rem;">Great job! Let's see how you did...</p>
+                <h1 style="color: {color}; margin-bottom: 0.5rem;">Exam Complete!</h1>
+                <p style="color: #6b7280; font-size: 1.2rem;">{congrats_msg}</p>
             </div>
             ''', unsafe_allow_html=True)
             st.write("")
@@ -1178,9 +1252,8 @@ def show_qna_knowledge_base(user):
     tags VARIANT,
     created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
     """
-    # ERROR:__main__:Application error: 'list' object has no attribute 'to_dict'
-    qa_data = get_qa_data(selected_category, selected_difficulty, user['target_certification'].split(" - ")[0])
-    print(qa_data)
+    # Use cached Q&A data for better performance
+    qa_data = get_cached_qa_data(selected_category, selected_difficulty, user['target_certification'].split(" - ")[0])
 
     # Display Q&A
     if "qa_current_question" not in st.session_state:
@@ -1219,8 +1292,16 @@ def show_qna_knowledge_base(user):
 
 def show_progress_dashboard(user):
     """Premium Progress Dashboard with stunning visuals and animations"""
-    progress_data = get_user_progress(user["id"])
-    activity_data = get_activity_log(user["id"])
+
+    # Add refresh button
+    col1, col2 = st.columns([6, 1])
+    with col2:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+
+    progress_data = get_cached_user_progress(user["id"])
+    activity_data = get_cached_activity_log(user["id"])
 
     # Welcome Banner with Time-based Greeting
     current_hour = datetime.now().hour
@@ -1259,20 +1340,24 @@ def show_progress_dashboard(user):
         xp = progress_data.get("XP", 0)
         accuracy_percentage = int(progress_data.get("ACCURACY_PERCENTAGE", 0))
         
-        # Animated Metric Cards
+        # Animated Metric Cards with tooltips
         col1, col2, col3, col4 = st.columns(4, gap="medium")
-        
+
         with col1:
             st.markdown(create_metric_card("⏱️", "Study Time", f"{study_time_minutes}m", delta=None), unsafe_allow_html=True)
-        
+            st.caption("Total time spent studying and practicing")
+
         with col2:
             st.markdown(create_metric_card("📝", "Practice Exams", f"{practice_tests_taken}", delta=None), unsafe_allow_html=True)
-        
+            st.caption("Number of practice exams completed")
+
         with col3:
             st.markdown(create_metric_card("⭐", "Average Score", f"{average_score}%", delta=5 if average_score > 70 else -5), unsafe_allow_html=True)
-        
+            st.caption("Your average score across all exams")
+
         with col4:
             st.markdown(create_metric_card("🎯", "Accuracy", f"{accuracy_percentage}%", delta=3 if accuracy_percentage > 75 else -3), unsafe_allow_html=True)
+            st.caption("Percentage of correct answers overall")
         
         st.write("")
         
@@ -1364,31 +1449,56 @@ def show_progress_dashboard(user):
     # Recent Activity
     st.write("")
     st.markdown('<h2 style="margin: 2rem 0 1rem 0;">📝 Recent Activity</h2>', unsafe_allow_html=True)
-    
-    if activity_data:
-        last_activities = [row['ACTIVITY'] for row in activity_data]
-        last_descriptions = [row['DESCRIPTION'] for row in activity_data]
-        
-        activities = [
-            {"type": last_activities[0], "desc": last_descriptions[0], "time": "2 hours ago"},
-            {"type": last_activities[1], "desc": last_descriptions[1], "time": "5 hours ago"},
-            {"type": last_activities[2], "desc": last_descriptions[2], "time": "1 day ago"},
-        ]
-        
-        for activity in activities:
-            icon_map = {"exam": "📝", "chat": "💬", "tricks": "🧠"}
-            icon = icon_map.get(activity["type"], "📌")
-            
+
+    if activity_data and len(activity_data) > 0:
+        def get_relative_time(timestamp):
+            """Convert timestamp to relative time string"""
+            if not timestamp:
+                return "Unknown time"
+
+            now = datetime.now()
+            diff = now - timestamp
+
+            if diff.days > 0:
+                if diff.days == 1:
+                    return "1 day ago"
+                elif diff.days < 7:
+                    return f"{diff.days} days ago"
+                elif diff.days < 30:
+                    weeks = diff.days // 7
+                    return f"{weeks} week{'s' if weeks > 1 else ''} ago"
+                else:
+                    months = diff.days // 30
+                    return f"{months} month{'s' if months > 1 else ''} ago"
+            elif diff.seconds >= 3600:
+                hours = diff.seconds // 3600
+                return f"{hours} hour{'s' if hours > 1 else ''} ago"
+            elif diff.seconds >= 60:
+                minutes = diff.seconds // 60
+                return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+            else:
+                return "Just now"
+
+        for activity in activity_data:
+            activity_type = activity.get('ACTIVITY', 'activity')
+            description = activity.get('DESCRIPTION', 'No description')
+            created_at = activity.get('CREATED_AT')
+
+            icon_map = {"exam": "📝", "chat": "💬", "tricks": "🧠", "login": "🔐"}
+            icon = icon_map.get(activity_type, "📌")
+
+            relative_time = get_relative_time(created_at)
+
             st.markdown(f'''
             <div class="glass-card" style="padding: 1rem;">
                 <div style="display: flex; align-items: center; gap: 1rem;">
                     <div style="font-size: 2rem;">{icon}</div>
                     <div style="flex: 1;">
                         <div style="font-weight: 700; color: #232F3E; margin-bottom: 0.25rem;">
-                            {activity['desc']}
+                            {description}
                         </div>
                         <div style="color: #9ca3af; font-size: 0.875rem;">
-                            {activity['time']}
+                            {relative_time}
                         </div>
                     </div>
                 </div>
@@ -1405,18 +1515,19 @@ def show_progress_dashboard(user):
 
 def show_dashboard():
     """Premium Dashboard with World-Class Navigation"""
-    
+
     # Apply custom CSS
     st.markdown(get_custom_css(), unsafe_allow_html=True)
+
+    # Get user data with loading indicator
+    with st.spinner("Loading your dashboard..."):
+        user = get_user_from_db(st.session_state.user_email)
+        if not user:
+            st.error("Could not load user profile. Please try logging in again.")
+            st.stop()
     
-    # Get user data
-    user = get_user_from_db(st.session_state.user_email)
-    if not user:
-        st.error("Could not load user profile. Please try logging in again.")
-        st.stop()
-    
-    # Get user progress for sidebar stats
-    progress_data = get_user_progress(user["id"])
+    # Get user progress for sidebar stats (cached)
+    progress_data = get_cached_user_progress(user["id"])
     streak = progress_data.get("STREAK", 0) if progress_data else 0
     xp = progress_data.get("XP", 0) if progress_data else 0
     
@@ -1552,15 +1663,20 @@ def show_dashboard():
         ''', unsafe_allow_html=True)
     
     # Display selected section
-    if section == "Progress Dashboard":
-        show_progress_dashboard(user)
-    elif section == "AI Study Coach":
-        show_ai_chat(user)
-    elif section == "Practice Exams":
-        show_practice_exam(user)
-    elif section == "Study Tricks":
-        show_study_tricks(user)
-    elif section == "Answer Evaluation":
-        show_answer_evaluation(user)
-    elif section == "Q&A Knowledge Base":
-        show_qna_knowledge_base(user)
+    try:
+        if section == "Progress Dashboard":
+            show_progress_dashboard(user)
+        elif section == "AI Study Coach":
+            show_ai_chat(user)
+        elif section == "Practice Exams":
+            show_practice_exam(user)
+        elif section == "Study Tricks":
+            show_study_tricks(user)
+        elif section == "Answer Evaluation":
+            show_answer_evaluation(user)
+        elif section == "Q&A Knowledge Base":
+            show_qna_knowledge_base(user)
+    except Exception as e:
+        logger.error(f"Error displaying section '{section}': {str(e)}", exc_info=True)
+        st.error(f"❌ An error occurred: {str(e)}\n\nCheck logs for detailed traceback.")
+        st.write("**Debug Info:** Check application logs for full traceback with line numbers.")

@@ -12,7 +12,9 @@ from database import (
     check_if_user_exists,
     insert_user,
     get_user_by_email,
-    update_last_login
+    update_last_login,
+    log_activity,
+    increment_user_streak
 )
 from auth import get_password_hash, verify_password
 import logging
@@ -76,13 +78,19 @@ def login_user(email: str, password: str):
         
         # Update last login
         update_last_login(email)
-        
+
+        # Log activity
+        log_activity(user['ID'], 'login', f"{user['NAME']} logged in successfully")
+
+        # Increment user streak
+        increment_user_streak(user['ID'])
+
         # Store user info in session
         st.session_state.authenticated = True
         st.session_state.user_email = email
         st.session_state.user_id = user['ID']
         st.session_state.user_name = user['NAME']
-        
+
         logger.info(f"Successful login: {email}")
         return True
         

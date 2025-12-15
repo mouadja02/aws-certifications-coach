@@ -5,7 +5,7 @@ Uses Snowflake for data storage (integrates seamlessly with Streamlit Cloud)
 
 import os
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 # Configure logging
@@ -196,26 +196,127 @@ def create_user_progress(user_id: int):
         return False
 
 def get_user_progress(user_id: int):
-    """Get user progress data"""
+    """Get user progress data with real-time calculations"""
     try:
         conn = get_snowflake_connection()
         if conn is None:
             return None
-        
+
         session = conn.session()
+
+        # Get base progress data
         query = f"""
         SELECT * FROM user_progress WHERE user_id = {user_id}
         """
-        
+
         result = session.sql(query).collect()
-        
+
         if result and len(result) > 0:
             row = result[0]
-            return row.as_dict()
+            progress_dict = row.as_dict()
+
+            # Calculate streak based on last activity
+            last_activity_query = f"""
+            SELECT MAX(created_at) as last_activity
+            FROM activity_log
+            WHERE user_id = {user_id}
+            """
+            last_activity_result = session.sql(last_activity_query).collect()
+
+            if last_activity_result and last_activity_result[0]['LAST_ACTIVITY']:
+                last_activity = last_activity_result[0]['LAST_ACTIVITY']
+                days_since = (datetime.now() - last_activity).days
+
+                # Reset streak if more than 1 day has passed
+                if days_since > 1 and progress_dict.get('STREAK', 0) > 0:
+                    update_user_progress(user_id, {'streak': 0})
+                    progress_dict['STREAK'] = 0
+
+            # Calculate total XP from exam sessions
+            xp_query = f"""
+            SELECT
+                SUM(CASE WHEN passed = TRUE THEN total_questions * 10 ELSE total_questions * 5 END) as total_xp
+            FROM exam_sessions
+            WHERE user_id = {user_id}
+            """
+            xp_result = session.sql(xp_query).collect()
+
+            if xp_result and xp_result[0]['TOTAL_XP']:
+                calculated_xp = int(xp_result[0]['TOTAL_XP'])
+                progress_dict['XP'] = calculated_xp
+                # Update XP in database
+                update_user_progress(user_id, {'xp': calculated_xp})
+
+            return progress_dict
         return None
     except Exception as e:
         logger.error(f"Error retrieving user progress: {e}")
         return None
+
+def update_user_progress(user_id: int, updates: dict):
+    """Update user progress with dynamic fields"""
+    try:
+        conn = get_snowflake_connection()
+        if conn is None:
+            return False
+
+        session = conn.session()
+
+        # Build SET clause dynamically
+        set_clauses = []
+        for key, value in updates.items():
+            if isinstance(value, str):
+                set_clauses.append(f"{key} = '{value}'")
+            elif value is None:
+                set_clauses.append(f"{key} = NULL")
+            else:
+                set_clauses.append(f"{key} = {value}")
+
+        set_clauses.append("updated_at = CURRENT_TIMESTAMP()")
+
+        query = f"""
+        UPDATE user_progress
+        SET {', '.join(set_clauses)}
+        WHERE user_id = {user_id}
+        """
+
+        session.sql(query).collect()
+        logger.debug(f"User progress updated for user_id: {user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error updating user progress: {e}")
+        return False
+
+def increment_user_streak(user_id: int):
+    """Increment user's daily streak"""
+    try:
+        conn = get_snowflake_connection()
+        if conn is None:
+            return False
+
+        session = conn.session()
+
+        # Get current streak and longest streak
+        progress = get_user_progress(user_id)
+        if progress:
+            current_streak = progress.get('STREAK', 0) + 1
+            longest_streak = max(current_streak, progress.get('LONGEST_STREAK', 0))
+
+            query = f"""
+            UPDATE user_progress
+            SET streak = {current_streak},
+                longest_streak = {longest_streak},
+                updated_at = CURRENT_TIMESTAMP()
+            WHERE user_id = {user_id}
+            """
+
+            session.sql(query).collect()
+            logger.debug(f"Streak incremented for user_id: {user_id} to {current_streak}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error incrementing streak: {e}")
+        return False
 
 def get_topic_progress(user_id: int):
     """Get topic progress data"""
@@ -249,15 +350,27 @@ def get_activity_log(user_id: int):
         conn = get_snowflake_connection()
         if conn is None:
             return None
-        
+
         session = conn.session()
         query = f"""
-        SELECT * FROM activity_log WHERE user_id = {user_id} LIMIT 3"""
-        
+        SELECT activity, description, created_at
+        FROM activity_log
+        WHERE user_id = {user_id}
+        ORDER BY created_at DESC
+        LIMIT 3"""
+
         result = session.sql(query).collect()
-        
+
         if result and len(result) > 0:
-            return result
+            # Convert Snowflake Row objects to dictionaries
+            activities = []
+            for row in result:
+                activities.append({
+                    'ACTIVITY': row['ACTIVITY'],
+                    'DESCRIPTION': row['DESCRIPTION'],
+                    'CREATED_AT': row['CREATED_AT']
+                })
+            return activities
         return None
     except Exception as e:
         logger.error(f"Error retrieving activity log: {e}")
