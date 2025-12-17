@@ -86,7 +86,7 @@ def check_if_user_exists(email: str) -> bool:
         logger.error(f"Error checking if user exists: {e}")
         return False
 
-def insert_user(name: str, email: str, password: str, target_certification: str, age: int = None):
+def insert_user(name: str, email: str, password: str, target_certification: str):
     """Insert a new user into Snowflake"""
     try:
         conn = get_snowflake_connection()
@@ -98,8 +98,8 @@ def insert_user(name: str, email: str, password: str, target_certification: str,
         # Insert user
         query = f"""
         INSERT INTO logged_users 
-        (name, email, password, target_certification, age, is_active, created_at, updated_at)
-        VALUES ('{name}', '{email}', '{password}', '{target_certification}', {age if age else 'NULL'}, 1, 
+        (name, email, password, target_certification, is_active, created_at, updated_at)
+        VALUES ('{name}', '{email}', '{password}', '{target_certification}', 1, 
                 CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())
         """
         
@@ -125,7 +125,7 @@ def get_user_by_email(email: str):
         
         session = conn.session()
         query = f"""
-        SELECT id, name, email, password, age, target_certification, 
+        SELECT id, name, email, password, target_certification, 
                created_at, updated_at
         FROM logged_users 
         WHERE email = '{email}' AND is_active = 1
@@ -140,7 +140,6 @@ def get_user_by_email(email: str):
                 'NAME': row['NAME'],
                 'EMAIL': row['EMAIL'],
                 'PASSWORD': row['PASSWORD'],
-                'AGE': row['AGE'],
                 'TARGET_CERTIFICATION': row['TARGET_CERTIFICATION'],
                 'CREATED_AT': row['CREATED_AT'],
                 'UPDATED_AT': row['UPDATED_AT']

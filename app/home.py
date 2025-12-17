@@ -352,8 +352,6 @@ def show_register_page():
                 else:
                     st.warning(f"⚠️ {msg}")
             
-            age = st.number_input("🎂 Age", min_value=18, max_value=100, value=25, label_visibility="visible")
-
             certification = st.selectbox(
                 "🎓 Target AWS Certification",
                 [
@@ -402,7 +400,7 @@ def show_register_page():
                         # Attempt registration
                         try:
                             with st.spinner("🔄 Creating your account..."):
-                                if register_user(name, email, password, certification, age):
+                                if register_user(name, email, password, certification):
                                     logger.info(f"New user registered: {email}")
                                     st.success("🎉 Account created successfully! Redirecting to login...")
                                     # Auto-redirect to login after 2 seconds

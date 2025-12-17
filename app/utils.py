@@ -21,7 +21,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def register_user(name: str, email: str, password: str, certification: str, age: int):
+def register_user(name: str, email: str, password: str, certification: str):
     """
     Register a new user
     Returns: True if successful, False otherwise
@@ -40,8 +40,7 @@ def register_user(name: str, email: str, password: str, certification: str, age:
             name=name,
             email=email,
             password=hashed_password,
-            target_certification=certification,
-            age=age
+            target_certification=certification
         )
         
         if success:

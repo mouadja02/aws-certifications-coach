@@ -43,7 +43,6 @@ def get_user_from_db(email: str):
                 'id': user['ID'],
                 'name': user['NAME'],
                 'email': user['EMAIL'],
-                'age': user['AGE'],
                 'target_certification': user['TARGET_CERTIFICATION']
             }
     except Exception as e:
