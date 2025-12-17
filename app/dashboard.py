@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 import logging
-import traceback
+import random
 
 
 from database import (
@@ -27,7 +27,7 @@ from components import show_confetti, show_toast, show_loading_skeleton
 
 # Configure logging with detailed format including line numbers and traceback
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -214,7 +214,7 @@ def show_ai_chat(user):
                 # Clear cache to update recent activity
                 st.cache_data.clear()
         except Exception as e:
-            print(f"Error: {e}")
+            logger.error(f"Error: {e}")
             response_text = "Sorry, I'm having trouble processing your question. Please try again."
 
         st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -793,13 +793,13 @@ def show_practice_exam(user):
                                         # Clear cache to show updated stats
                                         st.cache_data.clear()
                                 except Exception as e:
-                                    print(f"Could not save results to database: {e}")
+                                    logger.error(f"Could not save results to database: {e}")
                                     
                                 # Clean up Valkey
                                 try:
                                     valkey.delete_session(session_id)
                                 except Exception as e:
-                                    print(f"Could not delete Valkey session: {e}")
+                                    logger.error(f"Could not delete Valkey session: {e}")
                                 
                                 # Mark as finished
                                 st.session_state.exam_finished = True
@@ -911,14 +911,14 @@ def show_practice_exam(user):
             st.write("---")
             if st.button("🔄 Take Another Exam", use_container_width=True):
                 # Reset all exam session state 
-                print("Taking another exam")
+                logger.info("Taking another exam")
                 done = True
         
         # Show Quit Exam button only during active exam (not when results are shown)
         elif st.session_state.exam_session_id and not st.session_state.exam_finished:
             st.write("")
             if st.button("❌ Quit Exam", use_container_width=True):
-                print("Quitting exam early")
+                logger.info("Quitting exam early")
                 done = True
         
         # Cleanup logic (executes when done flag is set)
@@ -932,15 +932,15 @@ def show_practice_exam(user):
                 }
                 result = ai_service._call_n8n_webhook(ai_service.exam_webhook, data, async_call=False)
                 if result and result.get("error"):
-                    print(f"Warning: Could not notify n8n: {result.get('error')}")
+                    logger.warning(f"Warning: Could not notify n8n: {result.get('error')}")
             except Exception as e:
-                print(f"Warning: Failed to notify n8n about session cleanup: {e}")
+                logger.warning(f"Warning: Failed to notify n8n about session cleanup: {e}")
             
             # Clean up Valkey session
             try:
                 valkey.delete_session(session_id)
             except Exception as e:
-                print(f"Warning: Could not delete Valkey session: {e}")
+                logger.warning(f"Warning: Could not delete Valkey session: {e}")
             
             # Reset all session state
             st.session_state.exam_session_id = None
@@ -1245,26 +1245,6 @@ def show_qna_knowledge_base(user):
     selected_category = st.selectbox("Select a category:", categories)
     selected_difficulty = st.selectbox("Select a difficulty:", difficulty)
     
-    """
-    SNOWFLAKE TABLE 
-    aws_scenarios (
-    scenario_id VARCHAR(255) PRIMARY KEY,
-    category VARCHAR(50) NOT NULL,
-    difficulty VARCHAR(20) NOT NULL,
-    title VARCHAR(500) NOT NULL,
-    target_certification VARCHAR(500) NOT NULL,
-    scenario_text TEXT NOT NULL,
-    challenge_question TEXT NOT NULL,
-    solution_answer TEXT NOT NULL,
-    best_practices TEXT,
-    aws_services_used VARIANT,
-    architecture_considerations TEXT,
-    cost_optimization_tips TEXT,
-    security_considerations TEXT,
-    reference_links VARIANT,
-    tags VARIANT,
-    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
-    """
     # Use cached Q&A data for better performance
     qa_data = get_cached_qa_data(selected_category, selected_difficulty, user['target_certification'].split(" - ")[0])
 
@@ -1272,6 +1252,7 @@ def show_qna_knowledge_base(user):
     if "qa_current_question" not in st.session_state:
         st.session_state.qa_current_question = 0
     
+    # Diplay question randomly from the qa_data
     # Display current question if we have data
     if qa_data and len(qa_data) > 0:
         current_question = st.session_state.qa_current_question
@@ -1311,8 +1292,11 @@ def show_qna_knowledge_base(user):
                     st.session_state.qa_current_question -= 1
                     st.rerun()
             with col2:
-                if current_question < len(qa_data) - 1 and st.button("Next ➡️", key="qa_next"):
-                    st.session_state.qa_current_question += 1
+                if st.button("Next ➡️", key="qa_next"):
+                    random_index = random.randint(0, len(qa_data) - 1)
+                    while random_index == current_question:
+                        random_index = random.randint(0, len(qa_data) - 1)
+                    st.session_state.qa_current_question = random_index
                     st.rerun()
             
             # Show question counter

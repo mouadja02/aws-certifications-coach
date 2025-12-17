@@ -633,7 +633,7 @@ def get_activity_log(user_id: int):
 
         session = conn.session()
         query = f"""
-        SELECT activity, description, created_at
+        SELECT action as activity, details as description, created_at
         FROM activity_log
         WHERE user_id = {user_id}
         ORDER BY created_at DESC
