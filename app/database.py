@@ -174,25 +174,68 @@ def update_last_login(email: str):
 # ============================================
 
 def create_user_progress(user_id: int):
-    """Create initial progress entry for a user"""
+    """Create initial progress entry for a user with certification-specific topics"""
     try:
+        from utils import get_topics_for_certification
+        
         conn = get_snowflake_connection()
         if conn is None:
             return False
         
+        # Get user's target certification
+        user = get_user_by_email_from_id(user_id)
+        if not user:
+            return False
+        
+        # Get topics for this certification
+        tracked_topics = get_topics_for_certification(user.get('TARGET_CERTIFICATION', ''))
+        
         session = conn.session()
+        
+        # Convert topics list to Snowflake ARRAY format
+        topics_array_str = str(tracked_topics)
+        
         query = f"""
         INSERT INTO user_progress 
-        (user_id)
-        VALUES ({user_id})
+        (user_id, tracked_topics)
+        VALUES ({user_id}, {topics_array_str})
         """
         
         session.sql(query).collect()
-        logger.debug(f"User progress created for user_id: {user_id}")
+        logger.debug(f"User progress created for user_id: {user_id} with topics: {tracked_topics}")
         return True
     except Exception as e:
         logger.error(f"Error creating user progress: {e}")
         return False
+
+def get_user_by_email_from_id(user_id: int):
+    """Helper to get user data from user_id"""
+    try:
+        conn = get_snowflake_connection()
+        if conn is None:
+            return None
+        
+        session = conn.session()
+        query = f"""
+        SELECT id, name, email, target_certification
+        FROM logged_users 
+        WHERE id = {user_id}
+        """
+        
+        result = session.sql(query).collect()
+        
+        if result and len(result) > 0:
+            row = result[0]
+            return {
+                'ID': row['ID'],
+                'NAME': row['NAME'],
+                'EMAIL': row['EMAIL'],
+                'TARGET_CERTIFICATION': row['TARGET_CERTIFICATION']
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Error retrieving user by id: {e}")
+        return None
 
 def get_user_progress(user_id: int):
     """Get user progress data with real-time calculations"""
@@ -266,6 +309,10 @@ def update_user_progress(user_id: int, updates: dict):
         for key, value in updates.items():
             if isinstance(value, str):
                 set_clauses.append(f"{key} = '{value}'")
+            elif isinstance(value, list):
+                # Handle arrays for Snowflake
+                array_str = str(value)
+                set_clauses.append(f"{key} = {array_str}")
             elif value is None:
                 set_clauses.append(f"{key} = NULL")
             else:
@@ -312,28 +359,69 @@ def increment_scenarios_explored(user_id: int):
         logger.error(f"Error incrementing scenarios explored: {e}")
         return False
 
-def update_topic_progress_from_exam(user_id: int, topic: str, score_percentage: float):
-    """Update topic progress based on exam performance"""
+def update_topic_progress_from_exam(user_id: int, topic: str, correct_count: int, total_count: int):
+    """Update topic progress based on exam performance (using arrays)"""
     try:
-        # Map exam topics to progress fields
-        topic_mapping = {
-            'Storage Services': 'storage_topic_progress',
-            'Compute Services': 'compute_topic_progress',
-            'Networking & Content Delivery': 'networking_topic_progress',
-            'Security, Identity & Compliance': 'security_topic_progress',
-            'Database Services': 'database_topic_progress'
-        }
+        from utils import get_topic_index
+        import json
         
-        # Check if topic has a dedicated progress field
-        if topic in topic_mapping:
-            field_name = topic_mapping[topic]
-            progress = get_user_progress(user_id)
+        progress = get_user_progress(user_id)
+        
+        if not progress:
+            return False
+        
+        # Get tracked topics for this user
+        tracked_topics = progress.get('TRACKED_TOPICS')
+        
+        # Handle string representation
+        if isinstance(tracked_topics, str):
+            try:
+                tracked_topics = json.loads(tracked_topics)
+            except:
+                tracked_topics = []
+        elif not isinstance(tracked_topics, list):
+            tracked_topics = []
+        
+        # Find index of this topic
+        index = get_topic_index(topic, tracked_topics)
+        
+        # Only update if topic is tracked for this certification
+        if index >= 0:
+            # Get current arrays or initialize default
+            scores = progress.get('TOPIC_SCORES')
+            questions = progress.get('TOPIC_QUESTIONS')
             
-            if progress:
-                current_progress = progress.get(field_name.upper(), 0)
-                # Blend current progress with new score (70% old, 30% new)
-                new_progress = int((current_progress * 0.7) + (score_percentage * 0.3))
-                return update_user_progress(user_id, {field_name: new_progress})
+            # Handle string representation
+            if isinstance(scores, str):
+                try:
+                    scores = json.loads(scores)
+                except:
+                    scores = [0, 0, 0, 0, 0, 0]
+            elif not isinstance(scores, list):
+                 scores = [0, 0, 0, 0, 0, 0]
+                 
+            if isinstance(questions, str):
+                try:
+                    questions = json.loads(questions)
+                except:
+                    questions = [0, 0, 0, 0, 0, 0]
+            elif not isinstance(questions, list):
+                questions = [0, 0, 0, 0, 0, 0]
+            
+            # Ensure length is 6
+            if len(scores) < 6:
+                scores.extend([0] * (6 - len(scores)))
+            if len(questions) < 6:
+                questions.extend([0] * (6 - len(questions)))
+            
+            # Update values at index
+            scores[index] += correct_count
+            questions[index] += total_count
+            
+            return update_user_progress(user_id, {
+                'topic_scores': scores,
+                'topic_questions': questions
+            })
         
         return True
     except Exception as e:
@@ -453,7 +541,7 @@ def track_exam_completion(user_id: int, total_questions: int, correct_answers: i
         calculate_and_update_accuracy(user_id)
         
         # Update topic-specific progress
-        update_topic_progress_from_exam(user_id, topic, score_percentage)
+        update_topic_progress_from_exam(user_id, topic, correct_answers, total_questions)
         
         # Check and update streak
         check_and_update_streak(user_id)

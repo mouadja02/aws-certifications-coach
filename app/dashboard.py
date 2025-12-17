@@ -13,15 +13,6 @@ from streamlit_option_menu import option_menu
 import logging
 import traceback
 
-# Configure logging with detailed format including line numbers and traceback
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
-
-sys.path.insert(0, os.path.dirname(__file__))
 
 from database import (
     get_user_by_email, save_chat_message, get_user_progress, get_activity_log, 
@@ -32,6 +23,17 @@ from ai_service import AIService
 from valkey_client import get_valkey_client
 from styles import get_custom_css, create_metric_card, create_progress_ring, create_badge, get_confetti_animation
 from components import show_confetti, show_toast, show_loading_skeleton
+
+
+# Configure logging with detailed format including line numbers and traceback
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+sys.path.insert(0, os.path.dirname(__file__))
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def get_user_from_db(email: str):
@@ -317,26 +319,12 @@ def show_practice_exam(user):
                 <div style="font-weight: 700; color: #232F3E; margin-bottom: 0.5rem;">Topic</div>
             </div>
             ''', unsafe_allow_html=True)
-            topic = st.selectbox("Exam Topic", [
-                "All Topics",
-                "Storage Services",
-                "Compute Services", 
-                "Networking & Content Delivery",
-                "Database Services",
-                "Security, Identity & Compliance",
-                "Management & Governance",
-                "Application Integration",
-                "Analytics & Big Data",
-                "Machine Learning & AI",
-                "Developer Tools & DevOps",
-                "Migration & Transfer",
-                "Cost Management",
-                "Serverless Computing",
-                "Containers",
-                "High Availability & Fault Tolerance",
-                "Well-Architected Framework",
-                "Hybrid Cloud & Edge"
-            ], key="topic", label_visibility="collapsed")
+            
+            # Get topics for user's certification
+            from utils import get_topics_for_certification
+            available_topics = ["All Topics"] + get_topics_for_certification(user["target_certification"])
+            
+            topic = st.selectbox("Exam Topic", available_topics, key="topic", label_visibility="collapsed")
         
         st.write("")
         
@@ -1373,11 +1361,47 @@ def show_progress_dashboard(user):
         
         practice_tests_taken = progress_data.get("PRACTICE_TESTS_TAKEN", 0)
         average_score = int(progress_data.get("AVERAGE_SCORE", 0))
-        storage_topic_progress = int(progress_data.get("STORAGE_TOPIC_PROGRESS", 0))
-        compute_topic_progress = int(progress_data.get("COMPUTE_TOPIC_PROGRESS", 0))
-        networking_topic_progress = int(progress_data.get("NETWORKING_TOPIC_PROGRESS", 0))
-        security_topic_progress = int(progress_data.get("SECURITY_TOPIC_PROGRESS", 0))
-        database_topic_progress = int(progress_data.get("DATABASE_TOPIC_PROGRESS", 0))
+        
+        # Parse topic arrays
+        import json
+        from utils import get_topics_for_certification
+        
+        tracked_topics = progress_data.get("TRACKED_TOPICS", [])
+        topic_scores = progress_data.get("TOPIC_SCORES", [0, 0, 0, 0, 0, 0])
+        topic_questions = progress_data.get("TOPIC_QUESTIONS", [0, 0, 0, 0, 0, 0])
+        
+        # Handle string representations
+        if isinstance(tracked_topics, str):
+            try: tracked_topics = json.loads(tracked_topics)
+            except: tracked_topics = []
+        
+        if isinstance(topic_scores, str):
+            try: topic_scores = json.loads(topic_scores)
+            except: topic_scores = [0, 0, 0, 0, 0, 0]
+            
+        if isinstance(topic_questions, str):
+            try: topic_questions = json.loads(topic_questions)
+            except: topic_questions = [0, 0, 0, 0, 0, 0]
+            
+        # Ensure lists
+        if not isinstance(tracked_topics, list): 
+            tracked_topics = get_topics_for_certification(user["target_certification"])
+        if not isinstance(topic_scores, list): 
+            topic_scores = [0, 0, 0, 0, 0, 0]
+        if not isinstance(topic_questions, list): 
+            topic_questions = [0, 0, 0, 0, 0, 0]
+        
+        # Ensure we have exactly 6 topics
+        if len(tracked_topics) == 0:
+            tracked_topics = get_topics_for_certification(user["target_certification"])
+        
+        # Calculate percentages safely
+        def safe_calc_progress(idx):
+            if idx < len(topic_scores) and idx < len(topic_questions):
+                if topic_questions[idx] > 0:
+                    return int((topic_scores[idx] / topic_questions[idx]) * 100)
+            return 0
+
         streak = progress_data.get("STREAK", 0)
         longest_streak = progress_data.get("LONGEST_STREAK", 0)
         xp = progress_data.get("XP", 0)
@@ -1468,45 +1492,82 @@ def show_progress_dashboard(user):
         # Topic Mastery with Circular Progress
         st.markdown('<h2 style="margin: 2rem 0 1rem 0;">📈 Topic Mastery</h2>', unsafe_allow_html=True)
         
-        col1, col2, col3, col4, col5 = st.columns(5)
+        # Topic icons mapping
+        topic_icons = {
+            "Storage Services": "🗄️",
+            "Compute Services": "💻",
+            "Networking & Content Delivery": "🌐",
+            "Security, Identity & Compliance": "🔒",
+            "Database Services": "🗃️",
+            "Management & Governance": "⚙️",
+            "Application Integration": "🔗",
+            "Analytics & Big Data": "📊",
+            "Machine Learning & AI": "🤖",
+            "Developer Tools & DevOps": "🛠️",
+            "Migration & Transfer": "📦",
+            "Cost Management": "💰",
+            "Serverless Computing": "⚡",
+            "Containers": "📦",
+            "High Availability & Fault Tolerance": "🔄",
+            "Well-Architected Framework": "🏛️",
+            "Hybrid Cloud & Edge": "🌍"
+        }
         
-        topics = [
-            ("Storage", storage_topic_progress, "🗄️"),
-            ("Compute", compute_topic_progress, "💻"),
-            ("Networking", networking_topic_progress, "🌐"),
-            ("Security", security_topic_progress, "🔒"),
-            ("Database", database_topic_progress, "🗃️"),
-        ]
+        # Build topic display data
+        topics_display = []
+        for i, topic_name in enumerate(tracked_topics):
+            if i < len(topic_scores) and i < len(topic_questions):
+                progress = safe_calc_progress(i)
+                icon = topic_icons.get(topic_name, "📚")
+                # Shorten topic name for display
+                display_name = topic_name.replace(" Services", "").replace(" & ", "/")
+                topics_display.append((display_name, progress, icon, topic_questions[i]))
         
-        for i, (topic, progress, icon) in enumerate(topics):
-            with [col1, col2, col3, col4, col5][i]:
-                st.markdown(f'''
-                <div class="glass-card" style="text-align: center; padding: 1.5rem;">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{icon}</div>
-                    {create_progress_ring(progress, topic, 100)}
-                </div>
-                ''', unsafe_allow_html=True)
+        # Display in 3 rows of 2 columns each (6 topics total)
+        for row in range(2):
+            cols = st.columns(3)
+            for col_idx in range(3):
+                topic_idx = row * 3 + col_idx
+                if topic_idx < len(topics_display):
+                    topic, progress, icon, total_q = topics_display[topic_idx]
+                    with cols[col_idx]:
+                        st.markdown(f'''
+                        <div class="glass-card" style="text-align: center; padding: 1.5rem;">
+                            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{icon}</div>
+                            {create_progress_ring(progress, topic, 100)}
+                            <div style="color: #6b7280; font-size: 0.8rem; margin-top: 0.5rem;">{total_q} questions</div>
+                        </div>
+                        ''', unsafe_allow_html=True)
         
         st.write("")
         
         # Detailed Topic Progress Bars
         st.markdown('<h3 style="margin: 2rem 0 1rem 0;">Detailed Progress</h3>', unsafe_allow_html=True)
         
-        for topic, progress, icon in topics:
-            st.markdown(f'''
-            <div class="glass-card" style="padding: 1rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                    <div style="font-weight: 700; color: #232F3E;">
-                        {icon} {topic}
-                    </div>
-                    <div style="font-weight: 800; color: #FF9900; font-size: 1.2rem;">
-                        {progress}%
+        for i, topic_name in enumerate(tracked_topics):
+            if i < len(topic_scores) and i < len(topic_questions):
+                progress = safe_calc_progress(i)
+                icon = topic_icons.get(topic_name, "📚")
+                correct = topic_scores[i]
+                total = topic_questions[i]
+                
+                st.markdown(f'''
+                <div class="glass-card" style="padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <div style="font-weight: 700; color: #232F3E;">
+                            {icon} {topic_name}
+                        </div>
+                        <div style="display: flex; gap: 1rem; align-items: center;">
+                            <div style="color: #6b7280; font-size: 0.875rem;">{correct}/{total} correct</div>
+                            <div style="font-weight: 800; color: #FF9900; font-size: 1.2rem;">
+                                {progress}%
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            ''', unsafe_allow_html=True)
-            st.progress(progress / 100)
-            st.write("")
+                ''', unsafe_allow_html=True)
+                st.progress(progress / 100)
+                st.write("")
     else:
         st.markdown('''
         <div class="glass-card" style="text-align: center; padding: 3rem;">
