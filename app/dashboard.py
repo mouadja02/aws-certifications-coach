@@ -1535,7 +1535,6 @@ def show_progress_dashboard(user):
                         <div class="glass-card" style="text-align: center; padding: 1.5rem;">
                             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{icon}</div>
                             {create_progress_ring(progress, topic, 100)}
-                            <div style="color: #6b7280; font-size: 0.8rem; margin-top: 0.5rem;">{total_q} questions</div>
                         ''', unsafe_allow_html=True)
         
         st.write("")
