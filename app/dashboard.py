@@ -16,7 +16,7 @@ import random
 
 from database import (
     get_user_by_email, save_chat_message, get_user_progress, get_activity_log, 
-    get_qa_data, increment_user_streak, log_activity, update_study_time, 
+    get_qa_data, log_activity, update_study_time, 
     increment_scenarios_explored, track_exam_completion, check_and_update_streak
 )
 from ai_service import AIService

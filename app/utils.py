@@ -13,8 +13,7 @@ from database import (
     insert_user,
     get_user_by_email,
     update_last_login,
-    log_activity,
-    increment_user_streak
+    log_activity
 )
 from auth import get_password_hash, verify_password
 import logging
@@ -227,8 +226,9 @@ def login_user(email: str, password: str):
         # Log activity
         log_activity(user['ID'], 'login', f"{user['NAME']} logged in successfully")
 
-        # Increment user streak
-        increment_user_streak(user['ID'])
+        # Check and update streak based on date (only increments once per day)
+        from database import check_and_update_streak
+        check_and_update_streak(user['ID'])
 
         # Store user info in session
         st.session_state.authenticated = True

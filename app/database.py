@@ -307,12 +307,22 @@ def update_user_progress(user_id: int, updates: dict):
         session = conn.session()
 
         # Build SET clause dynamically
+        from datetime import date, datetime
         set_clauses = []
         for key, value in updates.items():
-            if isinstance(value, str):
-                # Escape single quotes in strings
-                escaped_value = value.replace(chr(39), chr(39)+chr(39))
-                set_clauses.append(f"{key} = '{escaped_value}'")
+            if isinstance(value, (date, datetime)):
+                # Handle date/datetime objects - format for Snowflake DATE type
+                date_str = value.strftime('%Y-%m-%d') if isinstance(value, date) else value.date().strftime('%Y-%m-%d')
+                set_clauses.append(f"{key} = '{date_str}'")
+            elif isinstance(value, str):
+                # Check if it's already a formatted date string (starts with quote)
+                if value.startswith("'") and value.endswith("'"):
+                    # Already formatted, use as-is
+                    set_clauses.append(f"{key} = {value}")
+                else:
+                    # Escape single quotes in strings
+                    escaped_value = value.replace(chr(39), chr(39)+chr(39))
+                    set_clauses.append(f"{key} = '{escaped_value}'")
             elif isinstance(value, list):
                 # Handle arrays for Snowflake using ARRAY_CONSTRUCT
                 if len(value) == 0:
@@ -459,7 +469,12 @@ def calculate_and_update_accuracy(user_id: int):
         return False
 
 def check_and_update_streak(user_id: int):
-    """Check if user maintains streak and update accordingly"""
+    """
+    Check if user maintains streak and update accordingly based on date.
+    Only increments once per day - if user already had activity today, no change.
+    If it's a new day (consecutive), increments streak.
+    If more than 1 day passed, resets streak to 1.
+    """
     try:
         from datetime import date
         
@@ -472,42 +487,60 @@ def check_and_update_streak(user_id: int):
         current_streak = progress.get('STREAK', 0)
         longest_streak = progress.get('LONGEST_STREAK', 0)
         
+        # Handle first activity ever
         if last_activity_date is None:
-            # First activity ever
             new_streak = 1
             new_longest = 1
             update_user_progress(user_id, {
                 'streak': new_streak,
                 'longest_streak': new_longest,
-                'last_activity_date': f"'{today}'"
+                'last_activity_date': today
             })
+            logger.debug(f"First activity for user {user_id}, streak set to 1")
             return True
         
         # Convert last_activity_date to date if it's a datetime
         if hasattr(last_activity_date, 'date'):
             last_activity_date = last_activity_date.date()
+        elif isinstance(last_activity_date, str):
+            # Handle string date format
+            try:
+                from datetime import datetime
+                last_activity_date = datetime.strptime(last_activity_date.split()[0], '%Y-%m-%d').date()
+            except:
+                # If parsing fails, treat as first activity
+                update_user_progress(user_id, {
+                    'streak': 1,
+                    'longest_streak': max(1, longest_streak),
+                    'last_activity_date': today
+                })
+                return True
         
+        # Calculate days difference
         days_diff = (today - last_activity_date).days
         
         if days_diff == 0:
-            # Same day, no streak change
+            # Same day - user already had activity today, no streak change
+            logger.debug(f"User {user_id} already had activity today, no streak change")
             return True
         elif days_diff == 1:
-            # Consecutive day, increment streak
+            # Consecutive day - increment streak
             new_streak = current_streak + 1
             new_longest = max(new_streak, longest_streak)
             update_user_progress(user_id, {
                 'streak': new_streak,
                 'longest_streak': new_longest,
-                'last_activity_date': f"'{today}'"
+                'last_activity_date': today
             })
+            logger.debug(f"User {user_id} streak incremented to {new_streak} (consecutive day)")
             return True
         else:
-            # Streak broken, reset to 1
+            # Streak broken (more than 1 day passed) - reset to 1
             update_user_progress(user_id, {
                 'streak': 1,
-                'last_activity_date': f"'{today}'"
+                'last_activity_date': today
             })
+            logger.debug(f"User {user_id} streak broken ({days_diff} days passed), reset to 1")
             return True
     except Exception as e:
         logger.error(f"Error checking/updating streak: {e}")
@@ -567,36 +600,8 @@ def track_exam_completion(user_id: int, total_questions: int, correct_answers: i
         logger.error(f"Error tracking exam completion: {e}")
         return False
 
-def increment_user_streak(user_id: int):
-    """Increment user's daily streak"""
-    try:
-        conn = get_snowflake_connection()
-        if conn is None:
-            return False
-
-        session = conn.session()
-
-        # Get current streak and longest streak
-        progress = get_user_progress(user_id)
-        if progress:
-            current_streak = progress.get('STREAK', 0) + 1
-            longest_streak = max(current_streak, progress.get('LONGEST_STREAK', 0))
-
-            query = f"""
-            UPDATE user_progress
-            SET streak = {current_streak},
-                longest_streak = {longest_streak},
-                updated_at = CURRENT_TIMESTAMP()
-            WHERE user_id = {user_id}
-            """
-
-            session.sql(query).collect()
-            logger.debug(f"Streak incremented for user_id: {user_id} to {current_streak}")
-            return True
-        return False
-    except Exception as e:
-        logger.error(f"Error incrementing streak: {e}")
-        return False
+# Note: increment_user_streak() has been removed
+# Use check_and_update_streak() instead, which properly handles date-based streak tracking
 
 def get_topic_progress(user_id: int):
     """Get topic progress data"""
@@ -635,7 +640,7 @@ def get_activity_log(user_id: int):
         query = f"""
         SELECT action as activity, details as description, created_at
         FROM activity_log
-        WHERE user_id = {user_id}
+        WHERE user_id = {user_id} AND action != 'login'
         ORDER BY created_at DESC
         LIMIT 3"""
 
