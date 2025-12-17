@@ -108,7 +108,7 @@ def insert_user(name: str, email: str, password: str, target_certification: str)
         # Get user ID and create progress
         user = get_user_by_email(email)
         if user:
-            create_user_progress(user['ID'])
+            create_user_progress(user['ID'], target_certification)
         
         logger.info(f"User created successfully: {email}")
         return True
@@ -173,7 +173,7 @@ def update_last_login(email: str):
 # USER PROGRESS OPERATIONS
 # ============================================
 
-def create_user_progress(user_id: int):
+def create_user_progress(user_id: int, target_certification: str):
     """Create initial progress entry for a user with certification-specific topics"""
     try:
         from utils import get_topics_for_certification
@@ -188,7 +188,7 @@ def create_user_progress(user_id: int):
             return False
         
         # Get topics for this certification
-        tracked_topics = get_topics_for_certification(user.get('TARGET_CERTIFICATION', ''))
+        tracked_topics = get_topics_for_certification(target_certification)
         
         session = conn.session()
         
