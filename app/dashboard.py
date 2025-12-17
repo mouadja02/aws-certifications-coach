@@ -1621,110 +1621,73 @@ def show_dashboard():
     with st.sidebar:
         # Logo and branding
         st.markdown('''
-        <div style="text-align: center; margin-bottom: 2rem; padding-top: 1rem;">
+        <div style="text-align: center; margin-bottom: 2rem;">
             <img src="https://dev-artifacts-002.s3.us-east-1.amazonaws.com/aws-color.png" 
-                 style="width: 140px; margin-bottom: 0.5rem; filter: drop-shadow(0 0 10px rgba(255, 153, 0, 0.3)); transition: transform 0.3s ease;"
-                 onmouseover="this.style.transform='scale(1.05)'"
-                 onmouseout="this.style.transform='scale(1)'"
-                 alt="AWS Logo">
-            <h1 style="color: white; margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -1px;">AWS Coach</h1>
-            <div style="height: 4px; width: 40px; background: #FF9900; margin: 0.5rem auto; border-radius: 2px;"></div>
+                 style="width: 120px; margin-bottom: 1rem;" alt="AWS Logo">
+            <h2 style="color: white; margin: 0; font-size: 1.5rem;">AWS Coach</h2>
         </div>
         ''', unsafe_allow_html=True)
         
-        # User Profile Card - Premium Redesign
+        # User Profile Card - Fixed version without code snippet
         user_name_display = user['name'] if len(user['name']) <= 20 else user['name'][:20] + "..."
+        cert_display = user['target_certification']
         
         st.markdown(f'''
-        <div class="glass-card" style="
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 1.25rem;
-            margin-bottom: 2rem;
-            backdrop-filter: blur(20px);
+        <div style="
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         ">
             <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                 <div style="
-                    position: relative;
-                    width: 56px;
-                    height: 56px;
+                    width: 60px;
+                    height: 60px;
+                    background: linear-gradient(135deg, #FF9900 0%, #EC7211 100%);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 2rem;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
                 ">
-                    <div style="
-                        width: 100%;
-                        height: 100%;
-                        background: linear-gradient(135deg, #FF9900 0%, #EC7211 100%);
-                        border-radius: 50%;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        font-size: 1.75rem;
-                        box-shadow: 0 4px 12px rgba(255, 153, 0, 0.3);
-                        border: 2px solid rgba(255, 255, 255, 0.2);
-                    ">
-                        👤
-                    </div>
-                    <div style="
-                        position: absolute;
-                        bottom: 0;
-                        right: 0;
-                        background: #10b981;
-                        width: 16px;
-                        height: 16px;
-                        border-radius: 50%;
-                        border: 2px solid #232F3E;
-                    "></div>
+                    👤
                 </div>
-                <div style="flex: 1; min-width: 0;">
-                    <div style="color: white; font-weight: 700; font-size: 1.1rem; truncate; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <div style="flex: 1;">
+                    <div style="color: white; font-weight: 700; font-size: 1.1rem; margin-bottom: 0.25rem;">
                         {user_name_display}
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="
-                            background: rgba(255, 153, 0, 0.2);
-                            color: #FF9900;
-                            padding: 2px 8px;
-                            border-radius: 12px;
-                            font-size: 0.75rem;
-                            font-weight: 600;
-                        ">Level {int(xp / 100) + 1}</span>
+                    <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.875rem;">
+                        Level {int(xp / 100) + 1}
+                    </div>
+                    <div style="color: rgba(255, 255, 255, 0.8); font-size: 0.875rem; margin-bottom: 0.5rem;">
+                    🎯 Target Certification
+                    </div>
+                    <div style="color: white; font-weight: 600; font-size: 0.9rem; line-height: 1.3;">
+                        {cert_display}
+                    </div>
+                        <div style="flex: 1; text-align: center;">
+                        <div style="font-size: 1.5rem;">🔥</div>
+                        <div style="color: #FF9900; font-weight: 800; font-size: 1.2rem;">{streak}</div>
+                        <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.75rem;">Day Streak</div>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <div style="font-size: 1.5rem;">⚡</div>
+                        <div style="color: #FF9900; font-weight: 800; font-size: 1.2rem;">{xp}</div>
+                        <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.75rem;">Total XP</div>
                     </div>
                 </div>
-            </div>
-            
-            <div style="margin-bottom: 1rem;">
-                <div style="color: rgba(255, 255, 255, 0.6); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem;">
-                    Target Certification
                 </div>
-                <div style="color: white; font-size: 0.9rem; line-height: 1.4; font-weight: 500;">
-                    {user['target_certification']}
-                </div>
-            </div>
-            
-            <div style="
-                display: flex;
-                background: rgba(0, 0, 0, 0.2);
-                border-radius: 0.75rem;
-                padding: 0.75rem;
-                gap: 1px;
-            ">
-                <div style="flex: 1; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.1);">
-                    <div style="font-size: 1.1rem; margin-bottom: 0.1rem;">🔥</div>
-                    <div style="color: white; font-weight: 700; font-size: 1.1rem;">{streak}</div>
-                    <div style="color: rgba(255, 255, 255, 0.5); font-size: 0.7rem;">Day Streak</div>
-                </div>
-                <div style="flex: 1; text-align: center;">
-                    <div style="font-size: 1.1rem; margin-bottom: 0.1rem;">⚡</div>
-                    <div style="color: white; font-weight: 700; font-size: 1.1rem;">{xp}</div>
-                    <div style="color: rgba(255, 255, 255, 0.5); font-size: 0.7rem;">Total XP</div>
-                </div>
-            </div>
+            </div>      
         </div>
         ''', unsafe_allow_html=True)
         
-        st.write("")
+        st.markdown("---")
         
         # Navigation Menu
-        st.markdown('''<div style="color: rgba(255, 255, 255, 0.4); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem; padding-left: 0.5rem;">Navigation</div>''', unsafe_allow_html=True)
+        st.markdown('''<div style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">Navigation</div>''', unsafe_allow_html=True)
         
         section = option_menu(
             menu_title=None,
@@ -1734,54 +1697,52 @@ def show_dashboard():
             default_index=0,
             styles={
                 "container": {"padding": "0", "background-color": "transparent"},
-                "icon": {"color": "rgba(255, 255, 255, 0.7)", "font-size": "1.1rem"}, 
-                "icon-selected": {"color": "#FFFFFF"},
+                "icon": {"color": "#FF9900", "font-size": "1.2rem"}, 
+                "icon-selected": {"color": "white"},
                 "nav-link": {
-                    "color": "rgba(255, 255, 255, 0.8)",
+                    "color": "#000000",
                     "font-size": "0.95rem",
-                    "font-weight": "500",
+                    "font-weight": "700",
                     "text-align": "left",
                     "margin": "0.25rem 0",
                     "padding": "0.75rem 1rem",
                     "border-radius": "0.5rem",
-                    "transition": "all 0.2s ease",
+                    "transition": "all 0.3s ease",
+                    "background-color": "rgba(255, 255, 255, 0.05)",
                 },
                 "nav-link-selected": {
-                    "background": "linear-gradient(90deg, #FF9900 0%, #EC7211 100%)",
-                    "color": "#FFFFFF",
-                    "font-weight": "600",
-                    "box-shadow": "0 4px 12px rgba(255, 153, 0, 0.3)",
-                    "border-radius": "0.5rem",
+                    "background": "linear-gradient(135deg, #222222 0%, #DB6100 100%)",
+                    "color": "white",
+                    "font-weight": "700",
+                    "box-shadow": "0 4px 6px rgba(0, 0, 0, 0.2)",
+                    "icon-color": "white",
                 },
             }
         )
         
-        # Spacer
-        st.write("")
-        st.write("")
+        st.markdown("---")
         
         # Quick Actions
-        st.markdown('''<div style="color: rgba(255, 255, 255, 0.4); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem; padding-left: 0.5rem;">Quick Actions</div>''', unsafe_allow_html=True)
+        st.markdown('''<div style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">Quick Actions</div>''', unsafe_allow_html=True)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("⚙️ Settings", use_container_width=True):
-                st.info("Settings coming soon!")
-        with col2:
-            if st.button("🚪 Logout", use_container_width=True, type="primary"):
-                st.session_state.authenticated = False
-                st.session_state.page = "home"
-                st.rerun()
+        if st.button("⚙️ Settings", use_container_width=True):
+            st.info("Settings coming soon!")
+        
+        if st.button("🚪 Logout", use_container_width=True, type="primary"):
+            st.session_state.authenticated = False
+            st.session_state.page = "home"
+            st.rerun()
         
         # Footer
         st.markdown('''
         <div style="
-            margin-top: auto;
+            position: fixed;
+            bottom: 1rem;
+            left: 1rem;
+            right: 1rem;
             text-align: center;
-            color: rgba(255, 255, 255, 0.3);
+            color: rgba(255, 255, 255, 0.4);
             font-size: 0.75rem;
-            padding-top: 2rem;
-            padding-bottom: 1rem;
         ">
             AWS Coach v2.0
         </div>
