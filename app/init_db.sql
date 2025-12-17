@@ -46,11 +46,13 @@ CREATE  OR REPLACE TABLE user_progress (
     database_topic_progress INTEGER DEFAULT 0,
     streak INTEGER DEFAULT 0,
     longest_streak INTEGER DEFAULT 0,
+    last_activity_date DATE,
     xp INTEGER DEFAULT 0,
     total_questions_answered INTEGER DEFAULT 0,
     correct_answers INTEGER DEFAULT 0,
     accuracy_percentage INTEGER DEFAULT 0,
     services_studied INTEGER DEFAULT 0,
+    scenarios_explored INTEGER DEFAULT 0,
     weak_areas VARCHAR,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES logged_users(id)

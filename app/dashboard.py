@@ -23,7 +23,11 @@ logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from database import get_user_by_email, save_chat_message, get_user_progress, get_activity_log, get_qa_data, increment_user_streak, log_activity
+from database import (
+    get_user_by_email, save_chat_message, get_user_progress, get_activity_log, 
+    get_qa_data, increment_user_streak, log_activity, update_study_time, 
+    increment_scenarios_explored, track_exam_completion, check_and_update_streak
+)
 from ai_service import AIService
 from valkey_client import get_valkey_client
 from styles import get_custom_css, create_metric_card, create_progress_ring, create_badge, get_confetti_animation
@@ -179,6 +183,10 @@ def show_ai_chat(user):
     prompt = st.chat_input("💬 Ask me anything about your certification...")
     
     if prompt:
+        # Track session start time
+        if "chat_session_start" not in st.session_state:
+            st.session_state.chat_session_start = datetime.now()
+        
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -195,6 +203,12 @@ def show_ai_chat(user):
 
                 # Log activity
                 log_activity(user["id"], 'chat', f"Asked: {prompt[:50]}...")
+                
+                # Update study time (estimate 2 minutes per interaction)
+                update_study_time(user["id"], 2)
+                
+                # Check and update streak
+                check_and_update_streak(user["id"])
 
                 # Clear cache to update recent activity
                 st.cache_data.clear()
@@ -739,9 +753,13 @@ def show_practice_exam(user):
 
                                 # Save to database BEFORE clearing anything
                                 try:
-                                    from database import execute_update, update_user_progress
+                                    from database import execute_update
                                     session_data = valkey.get_session(session_id)
                                     if session_data:
+                                        # Calculate exam duration
+                                        duration_minutes = int((datetime.now() - datetime.fromisoformat(session_data.get('started_at'))).seconds / 60)
+                                        
+                                        # Save exam session
                                         query = f"""
                                         INSERT INTO exam_sessions (
                                             session_id, user_id, certification, difficulty, topic,
@@ -760,13 +778,10 @@ def show_practice_exam(user):
                                             {str(score_percentage >= 70).upper()},
                                             '{session_data.get('started_at')}',
                                             '{datetime.now().isoformat()}',
-                                            {int((datetime.now() - datetime.fromisoformat(session_data.get('started_at'))).seconds / 60)}
+                                            {duration_minutes}
                                         )
                                         """
                                         execute_update(query)
-
-                                        # Update user progress and streak
-                                        increment_user_streak(user['id'])
 
                                         # Log activity
                                         log_activity(
@@ -775,19 +790,18 @@ def show_practice_exam(user):
                                             f"Completed {session_data.get('topic', 'All Topics')} exam with {score_percentage:.0f}% score"
                                         )
 
-                                        # Update practice tests count and average score
-                                        current_progress = get_user_progress(user['id'])
-                                        if current_progress:
-                                            tests_taken = current_progress.get('PRACTICE_TESTS_TAKEN', 0) + 1
-                                            current_avg = current_progress.get('AVERAGE_SCORE', 0)
-                                            new_avg = ((current_avg * (tests_taken - 1)) + score_percentage) / tests_taken
+                                        # Update study time based on duration
+                                        update_study_time(user['id'], duration_minutes)
 
-                                            update_user_progress(user['id'], {
-                                                'practice_tests_taken': tests_taken,
-                                                'average_score': int(new_avg),
-                                                'total_questions_answered': current_progress.get('TOTAL_QUESTIONS_ANSWERED', 0) + st.session_state.total_questions,
-                                                'correct_answers': current_progress.get('CORRECT_ANSWERS', 0) + st.session_state.exam_score
-                                            })
+                                        # Comprehensive tracking (includes streak, XP, accuracy, topic progress)
+                                        track_exam_completion(
+                                            user['id'],
+                                            st.session_state.total_questions,
+                                            st.session_state.exam_score,
+                                            score_percentage,
+                                            session_data.get('topic', 'All Topics'),
+                                            score_percentage >= 70
+                                        )
 
                                         # Clear cache to show updated stats
                                         st.cache_data.clear()
@@ -992,6 +1006,12 @@ def show_study_tricks(user):
                     topic
                 )
                 st.session_state.current_tricks = tricks
+                
+                # Track study time and activity
+                update_study_time(user["id"], 5)  # Estimate 5 minutes per trick session
+                check_and_update_streak(user["id"])
+                log_activity(user["id"], 'tricks', f"Generated memory tricks for: {topic}")
+                
                 st.rerun()
             except Exception as e:
                 st.error(f"Error generating tricks: {e}")
@@ -1167,6 +1187,12 @@ def show_answer_evaluation(user):
                         user["target_certification"]
                     )
                     st.session_state.current_evaluation = evaluation
+                    
+                    # Track study time and activity
+                    update_study_time(user["id"], 5)  # Estimate 5 minutes per evaluation
+                    check_and_update_streak(user["id"])
+                    log_activity(user["id"], 'evaluation', f"Answer evaluated: {question[:50]}...")
+                    
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error evaluating answer: {e}")
@@ -1263,6 +1289,21 @@ def show_qna_knowledge_base(user):
     if qa_data and len(qa_data) > 0:
         current_question = st.session_state.qa_current_question
         
+        # Track scenario view if not already tracked for this scenario
+        if "qa_tracked_scenarios" not in st.session_state:
+            st.session_state.qa_tracked_scenarios = set()
+        
+        scenario_id = qa_data[current_question].SCENARIO_ID
+        if scenario_id not in st.session_state.qa_tracked_scenarios:
+            # Track this scenario exploration
+            increment_scenarios_explored(user['id'])
+            update_study_time(user['id'], 3)  # Estimate 3 minutes per scenario
+            check_and_update_streak(user['id'])
+            log_activity(user['id'], 'qna', f"Explored scenario: {qa_data[current_question].TITLE[:50]}...")
+            st.session_state.qa_tracked_scenarios.add(scenario_id)
+            # Clear cache to update stats
+            st.cache_data.clear()
+        
         if current_question < len(qa_data):
             st.write(f"**Scenario:** {qa_data[current_question].SCENARIO_TEXT}")
             st.write(f"**Challenge Question:** {qa_data[current_question].CHALLENGE_QUESTION}")
@@ -1328,6 +1369,9 @@ def show_progress_dashboard(user):
 
     if progress_data:
         study_time_minutes = int(progress_data.get("STUDY_TIME_MINUTES", 0))
+        study_time_hours = study_time_minutes // 60
+        study_time_remaining_minutes = study_time_minutes % 60
+        
         practice_tests_taken = progress_data.get("PRACTICE_TESTS_TAKEN", 0)
         average_score = int(progress_data.get("AVERAGE_SCORE", 0))
         storage_topic_progress = int(progress_data.get("STORAGE_TOPIC_PROGRESS", 0))
@@ -1339,12 +1383,16 @@ def show_progress_dashboard(user):
         longest_streak = progress_data.get("LONGEST_STREAK", 0)
         xp = progress_data.get("XP", 0)
         accuracy_percentage = int(progress_data.get("ACCURACY_PERCENTAGE", 0))
+        scenarios_explored = progress_data.get("SCENARIOS_EXPLORED", 0)
+        total_questions_answered = progress_data.get("TOTAL_QUESTIONS_ANSWERED", 0)
+        correct_answers = progress_data.get("CORRECT_ANSWERS", 0)
         
         # Animated Metric Cards with tooltips
         col1, col2, col3, col4 = st.columns(4, gap="medium")
 
         with col1:
-            st.markdown(create_metric_card("⏱️", "Study Time", f"{study_time_minutes}m", delta=None), unsafe_allow_html=True)
+            time_display = f"{study_time_hours}h {study_time_remaining_minutes}m" if study_time_hours > 0 else f"{study_time_minutes}m"
+            st.markdown(create_metric_card("⏱️", "Study Time", time_display, delta=None), unsafe_allow_html=True)
             st.caption("Total time spent studying and practicing")
 
         with col2:
@@ -1358,6 +1406,29 @@ def show_progress_dashboard(user):
         with col4:
             st.markdown(create_metric_card("🎯", "Accuracy", f"{accuracy_percentage}%", delta=3 if accuracy_percentage > 75 else -3), unsafe_allow_html=True)
             st.caption("Percentage of correct answers overall")
+        
+        st.write("")
+        
+        # Additional Stats Row
+        col1, col2, col3, col4 = st.columns(4, gap="medium")
+        
+        with col1:
+            st.markdown(create_metric_card("❓", "Questions Answered", f"{total_questions_answered}", delta=None), unsafe_allow_html=True)
+            st.caption("Total exam questions attempted")
+        
+        with col2:
+            st.markdown(create_metric_card("✅", "Correct Answers", f"{correct_answers}", delta=None), unsafe_allow_html=True)
+            st.caption("Number of questions answered correctly")
+        
+        with col3:
+            st.markdown(create_metric_card("🎬", "Scenarios Explored", f"{scenarios_explored}", delta=None), unsafe_allow_html=True)
+            st.caption("Q&A Knowledge Base scenarios viewed")
+        
+        with col4:
+            level = (xp // 100) + 1
+            xp_to_next = 100 - (xp % 100)
+            st.markdown(create_metric_card("📊", "Level", f"{level}", delta=None), unsafe_allow_html=True)
+            st.caption(f"{xp_to_next} XP to level {level + 1}")
         
         st.write("")
         

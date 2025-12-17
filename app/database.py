@@ -287,6 +287,185 @@ def update_user_progress(user_id: int, updates: dict):
         logger.error(f"Error updating user progress: {e}")
         return False
 
+def update_study_time(user_id: int, minutes_to_add: int):
+    """Add study time to user's total study time"""
+    try:
+        progress = get_user_progress(user_id)
+        if progress:
+            current_time = progress.get('STUDY_TIME_MINUTES', 0)
+            new_time = current_time + minutes_to_add
+            return update_user_progress(user_id, {'study_time_minutes': new_time})
+        return False
+    except Exception as e:
+        logger.error(f"Error updating study time: {e}")
+        return False
+
+def increment_scenarios_explored(user_id: int):
+    """Increment the number of scenarios explored by user"""
+    try:
+        progress = get_user_progress(user_id)
+        if progress:
+            current_count = progress.get('SCENARIOS_EXPLORED', 0)
+            new_count = current_count + 1
+            return update_user_progress(user_id, {'scenarios_explored': new_count})
+        return False
+    except Exception as e:
+        logger.error(f"Error incrementing scenarios explored: {e}")
+        return False
+
+def update_topic_progress_from_exam(user_id: int, topic: str, score_percentage: float):
+    """Update topic progress based on exam performance"""
+    try:
+        # Map exam topics to progress fields
+        topic_mapping = {
+            'Storage Services': 'storage_topic_progress',
+            'Compute Services': 'compute_topic_progress',
+            'Networking & Content Delivery': 'networking_topic_progress',
+            'Security, Identity & Compliance': 'security_topic_progress',
+            'Database Services': 'database_topic_progress'
+        }
+        
+        # Check if topic has a dedicated progress field
+        if topic in topic_mapping:
+            field_name = topic_mapping[topic]
+            progress = get_user_progress(user_id)
+            
+            if progress:
+                current_progress = progress.get(field_name.upper(), 0)
+                # Blend current progress with new score (70% old, 30% new)
+                new_progress = int((current_progress * 0.7) + (score_percentage * 0.3))
+                return update_user_progress(user_id, {field_name: new_progress})
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error updating topic progress: {e}")
+        return False
+
+def calculate_and_update_accuracy(user_id: int):
+    """Calculate and update accuracy percentage"""
+    try:
+        progress = get_user_progress(user_id)
+        if progress:
+            total_answered = progress.get('TOTAL_QUESTIONS_ANSWERED', 0)
+            correct = progress.get('CORRECT_ANSWERS', 0)
+            
+            if total_answered > 0:
+                accuracy = int((correct / total_answered) * 100)
+                return update_user_progress(user_id, {'accuracy_percentage': accuracy})
+        return False
+    except Exception as e:
+        logger.error(f"Error calculating accuracy: {e}")
+        return False
+
+def check_and_update_streak(user_id: int):
+    """Check if user maintains streak and update accordingly"""
+    try:
+        from datetime import date
+        
+        progress = get_user_progress(user_id)
+        if not progress:
+            return False
+        
+        today = date.today()
+        last_activity_date = progress.get('LAST_ACTIVITY_DATE')
+        current_streak = progress.get('STREAK', 0)
+        longest_streak = progress.get('LONGEST_STREAK', 0)
+        
+        if last_activity_date is None:
+            # First activity ever
+            new_streak = 1
+            new_longest = 1
+            update_user_progress(user_id, {
+                'streak': new_streak,
+                'longest_streak': new_longest,
+                'last_activity_date': f"'{today}'"
+            })
+            return True
+        
+        # Convert last_activity_date to date if it's a datetime
+        if hasattr(last_activity_date, 'date'):
+            last_activity_date = last_activity_date.date()
+        
+        days_diff = (today - last_activity_date).days
+        
+        if days_diff == 0:
+            # Same day, no streak change
+            return True
+        elif days_diff == 1:
+            # Consecutive day, increment streak
+            new_streak = current_streak + 1
+            new_longest = max(new_streak, longest_streak)
+            update_user_progress(user_id, {
+                'streak': new_streak,
+                'longest_streak': new_longest,
+                'last_activity_date': f"'{today}'"
+            })
+            return True
+        else:
+            # Streak broken, reset to 1
+            update_user_progress(user_id, {
+                'streak': 1,
+                'last_activity_date': f"'{today}'"
+            })
+            return True
+    except Exception as e:
+        logger.error(f"Error checking/updating streak: {e}")
+        return False
+
+def track_exam_completion(user_id: int, total_questions: int, correct_answers: int, 
+                         score_percentage: float, topic: str, passed: bool):
+    """Comprehensive tracking after exam completion"""
+    try:
+        progress = get_user_progress(user_id)
+        if not progress:
+            return False
+        
+        # Update practice tests taken
+        tests_taken = progress.get('PRACTICE_TESTS_TAKEN', 0) + 1
+        
+        # Update average score (weighted average)
+        current_avg = progress.get('AVERAGE_SCORE', 0)
+        new_avg = int(((current_avg * (tests_taken - 1)) + score_percentage) / tests_taken)
+        
+        # Update total questions and correct answers
+        total_answered = progress.get('TOTAL_QUESTIONS_ANSWERED', 0) + total_questions
+        total_correct = progress.get('CORRECT_ANSWERS', 0) + correct_answers
+        
+        # Calculate XP earned (10 points per correct, 5 per incorrect, bonus for passing)
+        xp_earned = (correct_answers * 10) + ((total_questions - correct_answers) * 5)
+        if passed:
+            xp_earned += 50  # Bonus for passing
+        
+        current_xp = progress.get('XP', 0)
+        new_xp = current_xp + xp_earned
+        
+        # Update all metrics
+        updates = {
+            'practice_tests_taken': tests_taken,
+            'average_score': new_avg,
+            'total_questions_answered': total_answered,
+            'correct_answers': total_correct,
+            'xp': new_xp
+        }
+        
+        update_user_progress(user_id, updates)
+        
+        # Update accuracy
+        calculate_and_update_accuracy(user_id)
+        
+        # Update topic-specific progress
+        update_topic_progress_from_exam(user_id, topic, score_percentage)
+        
+        # Check and update streak
+        check_and_update_streak(user_id)
+        
+        logger.info(f"Exam tracking completed for user {user_id}: {correct_answers}/{total_questions} ({score_percentage}%)")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error tracking exam completion: {e}")
+        return False
+
 def increment_user_streak(user_id: int):
     """Increment user's daily streak"""
     try:
