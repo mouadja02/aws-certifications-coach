@@ -200,7 +200,7 @@ def create_user_progress(user_id: int, target_certification: str):
         query = f"""
         INSERT INTO user_progress 
         (user_id, tracked_topics)
-        VALUES ({user_id}, {topics_array_str})
+        SELECT {user_id}, {topics_array_str}
         """
         
         session.sql(query).collect()
@@ -720,7 +720,7 @@ def get_chat_history(user_id: int, limit: int = 50):
 # ACTIVITY LOGGING
 # ============================================
 
-def log_activity(user_id: int, action: str, details: str = None, ip_address: str = None):
+def log_activity(user_id: int, action: str, details: str = None):
     """Log user activity for auditing"""
     try:
         conn = get_snowflake_connection()
@@ -729,11 +729,10 @@ def log_activity(user_id: int, action: str, details: str = None, ip_address: str
         
         session = conn.session()
         details_str = f"'{details.replace(chr(39), chr(39)+chr(39))}'" if details else 'NULL'
-        ip_str = f"'{ip_address}'" if ip_address else 'NULL'
         
         query = f"""
-        INSERT INTO activity_log (user_id, action, details, ip_address, created_at)
-        VALUES ({user_id if user_id else 'NULL'}, '{action}', {details_str}, {ip_str}, CURRENT_TIMESTAMP())
+        INSERT INTO activity_log (user_id, action, details, created_at)
+        VALUES ({user_id if user_id else 'NULL'}, '{action}', {details_str}, CURRENT_TIMESTAMP())
         """
         
         session.sql(query).collect()
