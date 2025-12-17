@@ -60,8 +60,8 @@ CREATE  OR REPLACE TABLE user_progress (
 CREATE  OR REPLACE TABLE activity_log (
     id INTEGER AUTOINCREMENT PRIMARY KEY,
     user_id INTEGER,
-    activity VARCHAR(100) NOT NULL,
-    description TEXT,
+    action VARCHAR(100) NOT NULL,
+    details TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES logged_users(id)
 );

@@ -1536,38 +1536,10 @@ def show_progress_dashboard(user):
                             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{icon}</div>
                             {create_progress_ring(progress, topic, 100)}
                             <div style="color: #6b7280; font-size: 0.8rem; margin-top: 0.5rem;">{total_q} questions</div>
-                        </div>
                         ''', unsafe_allow_html=True)
         
         st.write("")
-        
-        # Detailed Topic Progress Bars
-        st.markdown('<h3 style="margin: 2rem 0 1rem 0;">Detailed Progress</h3>', unsafe_allow_html=True)
-        
-        for i, topic_name in enumerate(tracked_topics):
-            if i < len(topic_scores) and i < len(topic_questions):
-                progress = safe_calc_progress(i)
-                icon = topic_icons.get(topic_name, "📚")
-                correct = topic_scores[i]
-                total = topic_questions[i]
-                
-                st.markdown(f'''
-                <div class="glass-card" style="padding: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <div style="font-weight: 700; color: #232F3E;">
-                            {icon} {topic_name}
-                        </div>
-                        <div style="display: flex; gap: 1rem; align-items: center;">
-                            <div style="color: #6b7280; font-size: 0.875rem;">{correct}/{total} correct</div>
-                            <div style="font-weight: 800; color: #FF9900; font-size: 1.2rem;">
-                                {progress}%
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                ''', unsafe_allow_html=True)
-                st.progress(progress / 100)
-                st.write("")
+
     else:
         st.markdown('''
         <div class="glass-card" style="text-align: center; padding: 3rem;">
@@ -1675,7 +1647,7 @@ def show_dashboard():
         
         # User Profile Card - Fixed version without code snippet
         user_name_display = user['name'] if len(user['name']) <= 20 else user['name'][:20] + "..."
-        cert_display = user['target_certification'] if len(user['target_certification']) <= 35 else user['target_certification'][:35] + "..."
+        cert_display = user['target_certification']
         
         st.markdown(f'''
         <div style="
