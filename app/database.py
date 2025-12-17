@@ -192,8 +192,10 @@ def create_user_progress(user_id: int, target_certification: str):
         
         session = conn.session()
         
-        # Convert topics list to Snowflake ARRAY format
-        topics_array_str = str(tracked_topics)
+        # Convert topics list to Snowflake ARRAY_CONSTRUCT format
+        # Escape single quotes in topic names and wrap each in quotes
+        quoted_topics = [f"'{topic.replace(chr(39), chr(39)+chr(39))}'" for topic in tracked_topics]
+        topics_array_str = f"ARRAY_CONSTRUCT({', '.join(quoted_topics)})"
         
         query = f"""
         INSERT INTO user_progress 
@@ -308,11 +310,23 @@ def update_user_progress(user_id: int, updates: dict):
         set_clauses = []
         for key, value in updates.items():
             if isinstance(value, str):
-                set_clauses.append(f"{key} = '{value}'")
+                # Escape single quotes in strings
+                escaped_value = value.replace(chr(39), chr(39)+chr(39))
+                set_clauses.append(f"{key} = '{escaped_value}'")
             elif isinstance(value, list):
-                # Handle arrays for Snowflake
-                array_str = str(value)
-                set_clauses.append(f"{key} = {array_str}")
+                # Handle arrays for Snowflake using ARRAY_CONSTRUCT
+                if len(value) == 0:
+                    set_clauses.append(f"{key} = ARRAY_CONSTRUCT()")
+                else:
+                    # Check if it's a list of strings (topics) or numbers (scores/questions)
+                    if isinstance(value[0], str):
+                        # For string arrays (topics), quote and escape each element
+                        quoted_items = [f"'{item.replace(chr(39), chr(39)+chr(39))}'" for item in value]
+                        array_str = f"ARRAY_CONSTRUCT({', '.join(quoted_items)})"
+                    else:
+                        # For numeric arrays (scores, questions), just join with commas
+                        array_str = f"ARRAY_CONSTRUCT({', '.join(map(str, value))})"
+                    set_clauses.append(f"{key} = {array_str}")
             elif value is None:
                 set_clauses.append(f"{key} = NULL")
             else:
