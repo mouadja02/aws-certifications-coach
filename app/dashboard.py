@@ -1407,11 +1407,11 @@ def show_progress_dashboard(user):
             st.caption("Number of practice exams completed")
 
         with col3:
-            st.markdown(create_metric_card("⭐", "Average Score", f"{average_score}%", delta=5 if average_score > 70 else -5), unsafe_allow_html=True)
+            st.markdown(create_metric_card("⭐", "Average Score", f"{average_score}%", delta=None), unsafe_allow_html=True)
             st.caption("Your average score across all exams")
 
         with col4:
-            st.markdown(create_metric_card("🎯", "Accuracy", f"{accuracy_percentage}%", delta=3 if accuracy_percentage > 75 else -3), unsafe_allow_html=True)
+            st.markdown(create_metric_card("🎯", "Accuracy", f"{accuracy_percentage}%", delta=None), unsafe_allow_html=True)
             st.caption("Percentage of correct answers overall")
         
         st.write("")
